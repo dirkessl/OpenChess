@@ -618,7 +618,7 @@ String WiFiManager::generateBoardViewPage() {
     html += "function getPieceSymbol(piece) {";
     html += "if (!piece) return '';";
     html += "const symbols = {";
-    html += "'R': '♜', 'N': '♞', 'B': '♝', 'Q': '♛', 'K': '♚', 'P': '♟',";
+    html += "'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙',";
     html += "'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟'";
     html += "};";
     html += "return symbols[piece] || piece;";
@@ -633,18 +633,18 @@ String WiFiManager::generateBoardViewPage() {
 
 String WiFiManager::getPieceSymbol(char piece) {
     switch(piece) {
-        case 'R': return "♜";
-        case 'N': return "♞";
-        case 'B': return "♝";
-        case 'Q': return "♛";
-        case 'K': return "♚";
-        case 'P': return "♟";
-        case 'r': return "♜";
-        case 'n': return "♞";
-        case 'b': return "♝";
-        case 'q': return "♛";
-        case 'k': return "♚";
-        case 'p': return "♟";
+        case 'R': return "♖";  // White Rook
+        case 'N': return "♘";  // White Knight
+        case 'B': return "♗";  // White Bishop
+        case 'Q': return "♕";  // White Queen
+        case 'K': return "♔";  // White King
+        case 'P': return "♙";  // White Pawn
+        case 'r': return "♜";  // Black Rook
+        case 'n': return "♞";  // Black Knight
+        case 'b': return "♝";  // Black Bishop
+        case 'q': return "♛";  // Black Queen
+        case 'k': return "♚";  // Black King
+        case 'p': return "♟";  // Black Pawn
         default: return String(piece);
     }
 }
@@ -697,12 +697,12 @@ String WiFiManager::generateBoardEditPage() {
             html += "<div class=\"square " + String(isLight ? "light" : "dark") + "\">";
             html += "<select name=\"r" + String(row) + "c" + String(col) + "\" id=\"r" + String(row) + "c" + String(col) + "\">";
             html += "<option value=\"\"" + String(piece == ' ' ? " selected" : "") + "></option>";
-            html += "<option value=\"R\"" + String(piece == 'R' ? " selected" : "") + ">♜ R</option>";
-            html += "<option value=\"N\"" + String(piece == 'N' ? " selected" : "") + ">♞ N</option>";
-            html += "<option value=\"B\"" + String(piece == 'B' ? " selected" : "") + ">♝ B</option>";
-            html += "<option value=\"Q\"" + String(piece == 'Q' ? " selected" : "") + ">♛ Q</option>";
-            html += "<option value=\"K\"" + String(piece == 'K' ? " selected" : "") + ">♚ K</option>";
-            html += "<option value=\"P\"" + String(piece == 'P' ? " selected" : "") + ">♟ P</option>";
+            html += "<option value=\"R\"" + String(piece == 'R' ? " selected" : "") + ">♖ R</option>";
+            html += "<option value=\"N\"" + String(piece == 'N' ? " selected" : "") + ">♘ N</option>";
+            html += "<option value=\"B\"" + String(piece == 'B' ? " selected" : "") + ">♗ B</option>";
+            html += "<option value=\"Q\"" + String(piece == 'Q' ? " selected" : "") + ">♕ Q</option>";
+            html += "<option value=\"K\"" + String(piece == 'K' ? " selected" : "") + ">♔ K</option>";
+            html += "<option value=\"P\"" + String(piece == 'P' ? " selected" : "") + ">♙ P</option>";
             html += "<option value=\"r\"" + String(piece == 'r' ? " selected" : "") + ">♜ r</option>";
             html += "<option value=\"n\"" + String(piece == 'n' ? " selected" : "") + ">♞ n</option>";
             html += "<option value=\"b\"" + String(piece == 'b' ? " selected" : "") + ">♝ b</option>";
