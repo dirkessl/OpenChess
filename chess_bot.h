@@ -45,6 +45,7 @@ private:
     bool gameStarted;
     bool botThinking;
     bool wifiConnected;
+    float currentEvaluation;  // Stockfish evaluation (in centipawns, positive = white advantage)
     
     // FEN notation handling
     String boardToFEN();
@@ -53,7 +54,7 @@ private:
     // WiFi and API
     bool connectToWiFi();
     String makeStockfishRequest(String fen);
-    bool parseStockfishResponse(String response, String &bestMove);
+    bool parseStockfishResponse(String response, String &bestMove, float &evaluation);
     
     // Move handling
     bool parseMove(String move, int &fromRow, int &fromCol, int &toRow, int &toCol);
@@ -86,6 +87,9 @@ public:
     
     // Set board state for editing/corrections
     void setBoardState(char newBoardState[8][8]);
+    
+    // Get current evaluation
+    float getEvaluation() { return currentEvaluation; }
 };
 
 #endif // CHESS_BOT_H

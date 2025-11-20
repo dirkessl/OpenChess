@@ -18,6 +18,7 @@ ChessBot::ChessBot(BoardDriver* boardDriver, ChessEngine* chessEngine, BotDiffic
     gameStarted = false;
     botThinking = false;
     wifiConnected = false;
+    currentEvaluation = 0.0;
 }
 
 void ChessBot::begin() {
@@ -402,7 +403,10 @@ String ChessBot::makeStockfishRequest(String fen) {
     return "";
 }
 
-bool ChessBot::parseStockfishResponse(String response, String &bestMove) {
+bool ChessBot::parseStockfishResponse(String response, String &bestMove, float &evaluation) {
+    // Initialize evaluation to 0 (neutral)
+    evaluation = 0.0;
+    
     // Find JSON content
     int jsonStart = response.indexOf("{");
     if (jsonStart == -1) {
@@ -420,6 +424,61 @@ bool ChessBot::parseStockfishResponse(String response, String &bestMove) {
     if (hasSuccess && json.indexOf("\"success\":true") == -1) {
         Serial.println("API request was not successful");
         return false;
+    }
+    
+    // Parse evaluation - try different possible field names
+    // Format 1: "evaluation": 0.5 (in pawns)
+    // Format 2: "evaluation": 50 (in centipawns)
+    // Format 3: "score": 0.5
+    // Format 4: "cp": 50 (centipawns)
+    int evalStart = json.indexOf("\"evaluation\":");
+    if (evalStart == -1) {
+        evalStart = json.indexOf("\"score\":");
+        if (evalStart == -1) {
+            evalStart = json.indexOf("\"cp\":");
+            if (evalStart >= 0) {
+                evalStart += 5; // Skip "cp":
+            }
+        } else {
+            evalStart += 8; // Skip "score":
+        }
+    } else {
+        evalStart += 14; // Skip "evaluation":
+    }
+    
+    if (evalStart >= 0) {
+        // Find the number value
+        String evalStr = json.substring(evalStart);
+        evalStr.trim();
+        // Remove any leading whitespace or quotes
+        while (evalStr.length() > 0 && (evalStr[0] == ' ' || evalStr[0] == '"' || evalStr[0] == '\'')) {
+            evalStr = evalStr.substring(1);
+        }
+        // Find the end of the number (comma, }, or whitespace)
+        int evalEnd = evalStr.length();
+        for (int i = 0; i < evalStr.length(); i++) {
+            char c = evalStr[i];
+            if (c == ',' || c == '}' || c == ' ' || c == '\n' || c == '\r') {
+                evalEnd = i;
+                break;
+            }
+        }
+        evalStr = evalStr.substring(0, evalEnd);
+        evalStr.trim();
+        
+        if (evalStr.length() > 0) {
+            evaluation = evalStr.toFloat();
+            // If evaluation is small (< 10), assume it's in pawns, convert to centipawns
+            // If evaluation is large (> 10), assume it's already in centipawns
+            if (evaluation > -10 && evaluation < 10) {
+                evaluation = evaluation * 100.0; // Convert pawns to centipawns
+            }
+            Serial.print("Parsed evaluation: ");
+            Serial.print(evaluation);
+            Serial.println(" centipawns");
+        }
+    } else {
+        Serial.println("No evaluation field found in response");
     }
     
     // Parse bestmove field - try different possible formats
@@ -498,7 +557,27 @@ void ChessBot::makeBotMove() {
     
     if (response.length() > 0) {
         String bestMove;
-        if (parseStockfishResponse(response, bestMove)) {
+        float evaluation = 0.0;
+        if (parseStockfishResponse(response, bestMove, evaluation)) {
+            // Store and print evaluation
+            currentEvaluation = evaluation;
+            Serial.print("=== STOCKFISH EVALUATION ===");
+            Serial.println();
+            if (evaluation > 0) {
+                Serial.print("White advantage: +");
+                Serial.print(evaluation / 100.0, 2);
+                Serial.println(" pawns");
+            } else if (evaluation < 0) {
+                Serial.print("Black advantage: ");
+                Serial.print(evaluation / 100.0, 2);
+                Serial.println(" pawns");
+            } else {
+                Serial.println("Position is equal (0.00 pawns)");
+            }
+            Serial.print("Evaluation in centipawns: ");
+            Serial.println(evaluation);
+            Serial.println("============================");
+            
             int fromRow, fromCol, toRow, toCol;
             if (parseMove(bestMove, fromRow, fromCol, toRow, toCol)) {
                 Serial.print("Bot calculated move: ");

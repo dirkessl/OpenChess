@@ -197,16 +197,18 @@ void loop() {
     char currentBoard[8][8];
     bool boardUpdated = false;
     
+    float evaluation = 0.0;
     if (currentMode == MODE_CHESS_MOVES && modeInitialized) {
       chessMoves.getBoardState(currentBoard);
       boardUpdated = true;
     } else if (currentMode == MODE_CHESS_BOT && modeInitialized) {
       chessBot.getBoardState(currentBoard);
+      evaluation = chessBot.getEvaluation();
       boardUpdated = true;
     }
     
     if (boardUpdated) {
-      wifiManager.updateBoardState(currentBoard);
+      wifiManager.updateBoardState(currentBoard, evaluation);
     }
     
     lastBoardUpdate = millis();

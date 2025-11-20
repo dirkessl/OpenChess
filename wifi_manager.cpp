@@ -16,6 +16,7 @@ WiFiManager::WiFiManager() : server(AP_PORT) {
     startupType = "WiFi";
     boardStateValid = false;
     hasPendingEdit = false;
+    boardEvaluation = 0.0;
     
     // Initialize board state to empty
     for (int row = 0; row < 8; row++) {
@@ -489,12 +490,17 @@ void WiFiManager::resetGameSelection() {
 }
 
 void WiFiManager::updateBoardState(char newBoardState[8][8]) {
+    updateBoardState(newBoardState, 0.0);
+}
+
+void WiFiManager::updateBoardState(char newBoardState[8][8], float evaluation) {
     for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
             boardState[row][col] = newBoardState[row][col];
         }
     }
     boardStateValid = true;
+    boardEvaluation = evaluation;
 }
 
 String WiFiManager::generateBoardJSON() {
@@ -520,6 +526,7 @@ String WiFiManager::generateBoardJSON() {
     
     json += "],";
     json += "\"valid\":" + String(boardStateValid ? "true" : "false");
+    json += ",\"evaluation\":" + String(boardEvaluation, 2);
     json += "}";
     
     return json;
@@ -557,6 +564,22 @@ String WiFiManager::generateBoardViewPage() {
     
     if (boardStateValid) {
         html += "<div class=\"status\">Board state: Active</div>";
+        // Show evaluation if available (for Chess Bot mode)
+        if (boardEvaluation != 0.0) {
+            float evalInPawns = boardEvaluation / 100.0;
+            String evalColor = "#ec8703";
+            String evalText = "";
+            if (boardEvaluation > 0) {
+                evalText = "+" + String(evalInPawns, 2) + " (White advantage)";
+                evalColor = "#4CAF50";
+            } else {
+                evalText = String(evalInPawns, 2) + " (Black advantage)";
+                evalColor = "#F44336";
+            }
+            html += "<div class=\"status\" style=\"color: " + evalColor + ";\">";
+            html += "Stockfish Evaluation: " + evalText;
+            html += "</div>";
+        }
         html += "<div class=\"board-container\">";
         html += "<div class=\"board\">";
         
@@ -587,6 +610,9 @@ String WiFiManager::generateBoardViewPage() {
     
     html += "<div class=\"info\">";
     html += "<p>Auto-refreshing every 2 seconds</p>";
+    html += "<div id=\"evaluation\" style=\"margin-top: 15px; padding: 10px; background-color: #444; border-radius: 5px; font-size: 16px; font-weight: bold;\">";
+    html += "Evaluation: <span id=\"eval-value\">--</span>";
+    html += "</div>";
     html += "</div>";
     html += "<a href=\"/board-edit\" class=\"button\">Edit Board</a>";
     html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
@@ -615,6 +641,25 @@ String WiFiManager::generateBoardViewPage() {
     html += "}";
     html += "index++;";
     html += "}";
+    html += "}";
+    html += "// Update evaluation";
+    html += "if (data.evaluation !== undefined) {";
+    html += "const evalValue = data.evaluation;";
+    html += "const evalInPawns = (evalValue / 100).toFixed(2);";
+    html += "let evalText = '';";
+    html += "let evalColor = '#ec8703';";
+    html += "if (evalValue > 0) {";
+    html += "evalText = '+' + evalInPawns + ' (White advantage)';";
+    html += "evalColor = '#4CAF50';";
+    html += "} else if (evalValue < 0) {";
+    html += "evalText = evalInPawns + ' (Black advantage)';";
+    html += "evalColor = '#F44336';";
+    html += "} else {";
+    html += "evalText = '0.00 (Equal)';";
+    html += "evalColor = '#ec8703';";
+    html += "}";
+    html += "document.getElementById('eval-value').textContent = evalText;";
+    html += "document.getElementById('eval-value').style.color = evalColor;";
     html += "}";
     html += "}";
     html += "});";

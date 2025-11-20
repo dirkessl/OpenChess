@@ -38,6 +38,7 @@ private:
     // Board state storage
     char boardState[8][8];
     bool boardStateValid;
+    float boardEvaluation;  // Stockfish evaluation (in centipawns)
     
     // Board edit storage (pending edits from web interface)
     char pendingBoardEdit[8][8];
@@ -83,7 +84,9 @@ public:
     
     // Board state management
     void updateBoardState(char newBoardState[8][8]);
+    void updateBoardState(char newBoardState[8][8], float evaluation);
     bool hasValidBoardState() { return boardStateValid; }
+    float getEvaluation() { return boardEvaluation; }
     
     // Board edit management
     bool getPendingBoardEdit(char editBoard[8][8]);
