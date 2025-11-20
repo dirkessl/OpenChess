@@ -173,6 +173,27 @@ void loop() {
   // Handle WiFi clients
   wifiManager.handleClient();
   
+  // Update board state for WiFi display
+  static unsigned long lastBoardUpdate = 0;
+  if (millis() - lastBoardUpdate > 500) { // Update every 500ms
+    char currentBoard[8][8];
+    bool boardUpdated = false;
+    
+    if (currentMode == MODE_CHESS_MOVES && modeInitialized) {
+      chessMoves.getBoardState(currentBoard);
+      boardUpdated = true;
+    } else if (currentMode == MODE_CHESS_BOT && modeInitialized) {
+      chessBot.getBoardState(currentBoard);
+      boardUpdated = true;
+    }
+    
+    if (boardUpdated) {
+      wifiManager.updateBoardState(currentBoard);
+    }
+    
+    lastBoardUpdate = millis();
+  }
+  
   // Check for WiFi game selection
   int selectedMode = wifiManager.getSelectedGameMode();
   if (selectedMode > 0) {

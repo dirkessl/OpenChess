@@ -318,3 +318,11 @@ void ChessMoves::reset() {
     boardDriver->clearAllLEDs();
     initializeBoard();
 }
+
+void ChessMoves::getBoardState(char boardState[8][8]) {
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            boardState[row][col] = board[row][col];
+        }
+    }
+}

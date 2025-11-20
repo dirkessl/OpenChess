@@ -35,9 +35,16 @@ private:
     String gameMode;
     String startupType;
     
+    // Board state storage
+    char boardState[8][8];
+    bool boardStateValid;
+    
     // Web interface methods
     String generateWebPage();
     String generateGameSelectionPage();
+    String generateBoardViewPage();
+    String generateBoardJSON();
+    String getPieceSymbol(char piece);
     void handleConfigSubmit(WiFiClient& client, String request);
     void handleGameSelection(WiFiClient& client, String request);
     void sendResponse(WiFiClient& client, String content, String contentType = "text/html");
@@ -59,6 +66,10 @@ public:
     // Game selection via web
     int getSelectedGameMode();
     void resetGameSelection();
+    
+    // Board state management
+    void updateBoardState(char newBoardState[8][8]);
+    bool hasValidBoardState() { return boardStateValid; }
 };
 
 #endif // WIFI_MANAGER_WIFININA_ENABLED

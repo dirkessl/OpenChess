@@ -80,6 +80,9 @@ public:
     void begin();
     void update();
     void setDifficulty(BotDifficulty diff);
+    
+    // Get current board state for WiFi display
+    void getBoardState(char boardState[8][8]);
 };
 
 #endif

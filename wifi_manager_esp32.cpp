@@ -9,6 +9,14 @@ WiFiManagerESP32::WiFiManagerESP32() : server(AP_PORT) {
     lichessToken = "";
     gameMode = "None";
     startupType = "WiFi";
+    boardStateValid = false;
+    
+    // Initialize board state to empty
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            boardState[row][col] = ' ';
+        }
+    }
 }
 
 void WiFiManagerESP32::begin() {
@@ -57,6 +65,8 @@ void WiFiManagerESP32::begin() {
         String gameSelectionPage = this->generateGameSelectionPage();
         this->server.send(200, "text/html", gameSelectionPage);
     });
+    server.on("/board", HTTP_GET, [this]() { this->handleBoard(); });
+    server.on("/board-view", HTTP_GET, [this]() { this->handleBoardView(); });
     server.on("/submit", HTTP_POST, [this]() { this->handleConfigSubmit(); });
     server.on("/gameselect", HTTP_POST, [this]() { this->handleGameSelection(); });
     server.onNotFound([this]() {
@@ -220,6 +230,7 @@ String WiFiManagerESP32::generateWebPage() {
     html += "<input type=\"submit\" value=\"Save Configuration\">";
     html += "</form>";
     html += "<a href=\"/game\" class=\"button\">Game Selection Interface</a>";
+    html += "<a href=\"/board-view\" class=\"button\">View Chess Board</a>";
     html += "<div class=\"note\">";
     html += "<p>Configure your OpenChess board settings and WiFi connection.</p>";
     html += "</div>";
@@ -285,6 +296,7 @@ String WiFiManagerESP32::generateGameSelectionPage() {
     html += "</div>";
     
     html += "</div>";
+    html += "<a href=\"/board-view\" class=\"button\">View Chess Board</a>";
     html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
     html += "</div>";
     
@@ -365,5 +377,179 @@ int WiFiManagerESP32::getSelectedGameMode() {
 
 void WiFiManagerESP32::resetGameSelection() {
     gameMode = "0";
+}
+
+void WiFiManagerESP32::updateBoardState(char newBoardState[8][8]) {
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            boardState[row][col] = newBoardState[row][col];
+        }
+    }
+    boardStateValid = true;
+}
+
+String WiFiManagerESP32::generateBoardJSON() {
+    String json = "{";
+    json += "\"board\":[";
+    
+    for (int row = 0; row < 8; row++) {
+        json += "[";
+        for (int col = 0; col < 8; col++) {
+            char piece = boardState[row][col];
+            if (piece == ' ') {
+                json += "\"\"";
+            } else {
+                json += "\"";
+                json += String(piece);
+                json += "\"";
+            }
+            if (col < 7) json += ",";
+        }
+        json += "]";
+        if (row < 7) json += ",";
+    }
+    
+    json += "],";
+    json += "\"valid\":" + String(boardStateValid ? "true" : "false");
+    json += "}";
+    
+    return json;
+}
+
+void WiFiManagerESP32::handleBoard() {
+    String boardJSON = generateBoardJSON();
+    sendResponse(boardJSON, "application/json");
+}
+
+void WiFiManagerESP32::handleBoardView() {
+    String boardViewPage = generateBoardViewPage();
+    sendResponse(boardViewPage, "text/html");
+}
+
+String WiFiManagerESP32::generateBoardViewPage() {
+    String html = "<!DOCTYPE html>";
+    html += "<html lang=\"en\">";
+    html += "<head>";
+    html += "<meta charset=\"UTF-8\">";
+    html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+    html += "<meta http-equiv=\"refresh\" content=\"2\">"; // Auto-refresh every 2 seconds
+    html += "<title>OpenChess Board View</title>";
+    html += "<style>";
+    html += "body { font-family: Arial, sans-serif; background-color: #5c5d5e; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }";
+    html += ".container { background-color: #353434; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); padding: 30px; }";
+    html += "h2 { text-align: center; color: #ec8703; font-size: 24px; margin-bottom: 20px; }";
+    html += ".board-container { display: inline-block; }";
+    html += ".board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0; border: 3px solid #ec8703; width: 480px; height: 480px; }";
+    html += ".square { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: bold; }";
+    html += ".square.light { background-color: #f0d9b5; }";
+    html += ".square.dark { background-color: #b58863; }";
+    html += ".square .piece { text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }";
+    html += ".square .piece.white { color: #ffffff; }";
+    html += ".square .piece.black { color: #000000; }";
+    html += ".info { text-align: center; color: #ec8703; margin-top: 20px; font-size: 14px; }";
+    html += ".back-button { background-color: #666; color: white; border: none; padding: 15px; font-size: 16px; width: 100%; border-radius: 5px; cursor: pointer; text-decoration: none; display: block; text-align: center; margin-top: 20px; }";
+    html += ".back-button:hover { background-color: #777; }";
+    html += ".status { text-align: center; color: #ec8703; margin-bottom: 20px; }";
+    html += "</style>";
+    html += "</head>";
+    html += "<body>";
+    html += "<div class=\"container\">";
+    html += "<h2>CHESS BOARD</h2>";
+    
+    if (boardStateValid) {
+        html += "<div class=\"status\">Board state: Active</div>";
+        html += "<div class=\"board-container\">";
+        html += "<div class=\"board\">";
+        
+        // Generate board squares
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                bool isLight = (row + col) % 2 == 0;
+                char piece = boardState[row][col];
+                
+                html += "<div class=\"square " + String(isLight ? "light" : "dark") + "\">";
+                
+                if (piece != ' ') {
+                    bool isWhite = (piece >= 'A' && piece <= 'Z');
+                    String pieceSymbol = getPieceSymbol(piece);
+                    html += "<span class=\"piece " + String(isWhite ? "white" : "black") + "\">" + pieceSymbol + "</span>";
+                }
+                
+                html += "</div>";
+            }
+        }
+        
+        html += "</div>";
+        html += "</div>";
+    } else {
+        html += "<div class=\"status\">Board state: Not available</div>";
+        html += "<p style=\"text-align: center; color: #ec8703;\">No active game detected. Start a game to view the board.</p>";
+    }
+    
+    html += "<div class=\"info\">";
+    html += "<p>Auto-refreshing every 2 seconds</p>";
+    html += "</div>";
+    html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
+    html += "<a href=\"/game\" class=\"back-button\">Game Selection</a>";
+    html += "</div>";
+    
+    html += "<script>";
+    html += "// Fetch board state via AJAX for smoother updates";
+    html += "function updateBoard() {";
+    html += "fetch('/board')";
+    html += ".then(response => response.json())";
+    html += ".then(data => {";
+    html += "if (data.valid) {";
+    html += "// Update board display";
+    html += "const squares = document.querySelectorAll('.square');";
+    html += "let index = 0;";
+    html += "for (let row = 0; row < 8; row++) {";
+    html += "for (let col = 0; col < 8; col++) {";
+    html += "const piece = data.board[row][col];";
+    html += "const square = squares[index];";
+    html += "if (piece && piece !== '') {";
+    html += "const isWhite = piece === piece.toUpperCase();";
+    html += "square.innerHTML = '<span class=\"piece ' + (isWhite ? 'white' : 'black') + '\">' + getPieceSymbol(piece) + '</span>';";
+    html += "} else {";
+    html += "square.innerHTML = '';";
+    html += "}";
+    html += "index++;";
+    html += "}";
+    html += "}";
+    html += "}";
+    html += "});";
+    html += "}";
+    html += "function getPieceSymbol(piece) {";
+    html += "if (!piece) return '';";
+    html += "const symbols = {";
+    html += "'R': '♜', 'N': '♞', 'B': '♝', 'Q': '♛', 'K': '♚', 'P': '♟',";
+    html += "'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟'";
+    html += "};";
+    html += "return symbols[piece] || piece;";
+    html += "}";
+    html += "setInterval(updateBoard, 2000);";
+    html += "</script>";
+    html += "</body>";
+    html += "</html>";
+    
+    return html;
+}
+
+String WiFiManagerESP32::getPieceSymbol(char piece) {
+    switch(piece) {
+        case 'R': return "♜";
+        case 'N': return "♞";
+        case 'B': return "♝";
+        case 'Q': return "♛";
+        case 'K': return "♚";
+        case 'P': return "♟";
+        case 'r': return "♜";
+        case 'n': return "♞";
+        case 'b': return "♝";
+        case 'q': return "♛";
+        case 'k': return "♚";
+        case 'p': return "♟";
+        default: return String(piece);
+    }
 }
 

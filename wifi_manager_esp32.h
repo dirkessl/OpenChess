@@ -38,12 +38,21 @@ private:
     String gameMode;
     String startupType;
     
+    // Board state storage
+    char boardState[8][8];
+    bool boardStateValid;
+    
     // Web interface methods
     String generateWebPage();
     String generateGameSelectionPage();
+    String generateBoardViewPage();
+    String generateBoardJSON();
+    String getPieceSymbol(char piece);
     void handleRoot();
     void handleGameSelection();
     void handleConfigSubmit();
+    void handleBoard();
+    void handleBoardView();
     void sendResponse(String content, String contentType = "text/html");
     void parseFormData(String data);
     
@@ -63,6 +72,10 @@ public:
     // Game selection via web
     int getSelectedGameMode();
     void resetGameSelection();
+    
+    // Board state management
+    void updateBoardState(char newBoardState[8][8]);
+    bool hasValidBoardState() { return boardStateValid; }
 };
 
 #endif // WIFI_MANAGER_ESP32_H

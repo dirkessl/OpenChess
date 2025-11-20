@@ -31,6 +31,9 @@ public:
     void update();
     bool isActive();
     void reset();
+    
+    // Get current board state for WiFi display
+    void getBoardState(char boardState[8][8]);
 };
 
 #endif // CHESS_MOVES_H
