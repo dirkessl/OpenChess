@@ -10,11 +10,13 @@ WiFiManagerESP32::WiFiManagerESP32() : server(AP_PORT) {
     gameMode = "None";
     startupType = "WiFi";
     boardStateValid = false;
+    hasPendingEdit = false;
     
     // Initialize board state to empty
     for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
             boardState[row][col] = ' ';
+            pendingBoardEdit[row][col] = ' ';
         }
     }
 }
@@ -67,6 +69,11 @@ void WiFiManagerESP32::begin() {
     });
     server.on("/board", HTTP_GET, [this]() { this->handleBoard(); });
     server.on("/board-view", HTTP_GET, [this]() { this->handleBoardView(); });
+    server.on("/board-edit", HTTP_GET, [this]() { 
+        String boardEditPage = this->generateBoardEditPage();
+        this->server.send(200, "text/html", boardEditPage);
+    });
+    server.on("/board-edit", HTTP_POST, [this]() { this->handleBoardEdit(); });
     server.on("/submit", HTTP_POST, [this]() { this->handleConfigSubmit(); });
     server.on("/gameselect", HTTP_POST, [this]() { this->handleGameSelection(); });
     server.onNotFound([this]() {
@@ -489,8 +496,8 @@ String WiFiManagerESP32::generateBoardViewPage() {
     html += "<div class=\"info\">";
     html += "<p>Auto-refreshing every 2 seconds</p>";
     html += "</div>";
+    html += "<a href=\"/board-edit\" class=\"button\">Edit Board</a>";
     html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
-    html += "<a href=\"/game\" class=\"back-button\">Game Selection</a>";
     html += "</div>";
     
     html += "<script>";
@@ -551,5 +558,176 @@ String WiFiManagerESP32::getPieceSymbol(char piece) {
         case 'p': return "♟";
         default: return String(piece);
     }
+}
+
+String WiFiManagerESP32::generateBoardEditPage() {
+    String html = "<!DOCTYPE html>";
+    html += "<html lang=\"en\">";
+    html += "<head>";
+    html += "<meta charset=\"UTF-8\">";
+    html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+    html += "<title>Edit Chess Board</title>";
+    html += "<style>";
+    html += "body { font-family: Arial, sans-serif; background-color: #5c5d5e; margin: 0; padding: 20px; }";
+    html += ".container { background-color: #353434; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); padding: 30px; max-width: 800px; margin: 0 auto; }";
+    html += "h2 { text-align: center; color: #ec8703; font-size: 24px; margin-bottom: 20px; }";
+    html += ".board-container { display: inline-block; margin: 20px auto; }";
+    html += ".board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0; border: 3px solid #ec8703; width: 480px; height: 480px; }";
+    html += ".square { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; position: relative; }";
+    html += ".square.light { background-color: #f0d9b5; }";
+    html += ".square.dark { background-color: #b58863; }";
+    html += ".square:hover { background-color: #ec8703 !important; opacity: 0.8; }";
+    html += ".square select { width: 100%; height: 100%; border: none; background: transparent; font-size: 32px; text-align: center; cursor: pointer; appearance: none; -webkit-appearance: none; -moz-appearance: none; }";
+    html += ".square select:focus { outline: 2px solid #ec8703; }";
+    html += ".controls { text-align: center; margin-top: 20px; }";
+    html += ".button { background-color: #ec8703; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 10px; }";
+    html += ".button:hover { background-color: #ebca13; }";
+    html += ".button.secondary { background-color: #666; }";
+    html += ".button.secondary:hover { background-color: #777; }";
+    html += ".info { text-align: center; color: #ec8703; margin-top: 20px; font-size: 14px; }";
+    html += ".back-button { background-color: #666; color: white; border: none; padding: 15px; font-size: 16px; width: 100%; border-radius: 5px; cursor: pointer; text-decoration: none; display: block; text-align: center; margin-top: 20px; }";
+    html += ".back-button:hover { background-color: #777; }";
+    html += ".status { text-align: center; color: #ec8703; margin-bottom: 20px; padding: 10px; background-color: #444; border-radius: 5px; }";
+    html += "</style>";
+    html += "</head>";
+    html += "<body>";
+    html += "<div class=\"container\">";
+    html += "<h2>EDIT CHESS BOARD</h2>";
+    html += "<div class=\"status\">Click on any square to change the piece. Empty = no piece.</div>";
+    
+    html += "<form id=\"boardForm\" method=\"POST\" action=\"/board-edit\">";
+    html += "<div class=\"board-container\">";
+    html += "<div class=\"board\">";
+    
+    // Generate editable board squares
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            bool isLight = (row + col) % 2 == 0;
+            char piece = boardState[row][col];
+            
+            html += "<div class=\"square " + String(isLight ? "light" : "dark") + "\">";
+            html += "<select name=\"r" + String(row) + "c" + String(col) + "\" id=\"r" + String(row) + "c" + String(col) + "\">";
+            html += "<option value=\"\"" + String(piece == ' ' ? " selected" : "") + "></option>";
+            html += "<option value=\"R\"" + String(piece == 'R' ? " selected" : "") + ">♜ R</option>";
+            html += "<option value=\"N\"" + String(piece == 'N' ? " selected" : "") + ">♞ N</option>";
+            html += "<option value=\"B\"" + String(piece == 'B' ? " selected" : "") + ">♝ B</option>";
+            html += "<option value=\"Q\"" + String(piece == 'Q' ? " selected" : "") + ">♛ Q</option>";
+            html += "<option value=\"K\"" + String(piece == 'K' ? " selected" : "") + ">♚ K</option>";
+            html += "<option value=\"P\"" + String(piece == 'P' ? " selected" : "") + ">♟ P</option>";
+            html += "<option value=\"r\"" + String(piece == 'r' ? " selected" : "") + ">♜ r</option>";
+            html += "<option value=\"n\"" + String(piece == 'n' ? " selected" : "") + ">♞ n</option>";
+            html += "<option value=\"b\"" + String(piece == 'b' ? " selected" : "") + ">♝ b</option>";
+            html += "<option value=\"q\"" + String(piece == 'q' ? " selected" : "") + ">♛ q</option>";
+            html += "<option value=\"k\"" + String(piece == 'k' ? " selected" : "") + ">♚ k</option>";
+            html += "<option value=\"p\"" + String(piece == 'p' ? " selected" : "") + ">♟ p</option>";
+            html += "</select>";
+            html += "</div>";
+        }
+    }
+    
+    html += "</div>";
+    html += "</div>";
+    
+    html += "<div class=\"controls\">";
+    html += "<button type=\"submit\" class=\"button\">Apply Changes</button>";
+    html += "<button type=\"button\" class=\"button secondary\" onclick=\"loadCurrentBoard()\">Reload Current Board</button>";
+    html += "<button type=\"button\" class=\"button secondary\" onclick=\"clearBoard()\">Clear All</button>";
+    html += "</div>";
+    html += "</form>";
+    
+    html += "<div class=\"info\">";
+    html += "<p><strong>Instructions:</strong></p>";
+    html += "<p>• Uppercase letters (R,N,B,Q,K,P) = White pieces</p>";
+    html += "<p>• Lowercase letters (r,n,b,q,k,p) = Black pieces</p>";
+    html += "<p>• Empty = No piece on that square</p>";
+    html += "<p>• Click 'Apply Changes' to update the physical board</p>";
+    html += "</div>";
+    
+    html += "<a href=\"/board-view\" class=\"back-button\">View Board</a>";
+    html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
+    html += "</div>";
+    
+    html += "<script>";
+    html += "function loadCurrentBoard() {";
+    html += "fetch('/board')";
+    html += ".then(response => response.json())";
+    html += ".then(data => {";
+    html += "if (data.valid) {";
+    html += "for (let row = 0; row < 8; row++) {";
+    html += "for (let col = 0; col < 8; col++) {";
+    html += "const piece = data.board[row][col] || '';";
+    html += "const select = document.getElementById('r' + row + 'c' + col);";
+    html += "select.value = piece;";
+    html += "}";
+    html += "}";
+    html += "}";
+    html += "});";
+    html += "}";
+    html += "function clearBoard() {";
+    html += "if (confirm('Clear all pieces from the board?')) {";
+    html += "for (let row = 0; row < 8; row++) {";
+    html += "for (let col = 0; col < 8; col++) {";
+    html += "document.getElementById('r' + row + 'c' + col).value = '';";
+    html += "}";
+    html += "}";
+    html += "}";
+    html += "}";
+    html += "</script>";
+    html += "</body>";
+    html += "</html>";
+    
+    return html;
+}
+
+void WiFiManagerESP32::handleBoardEdit() {
+    parseBoardEditData();
+    
+    String response = "<html><body style='font-family:Arial;background:#5c5d5e;color:#ec8703;text-align:center;padding:50px;'>";
+    response += "<h2>Board Updated!</h2>";
+    response += "<p>Your board changes have been applied.</p>";
+    response += "<p><a href='/board-view' style='color:#ec8703;'>View Board</a></p>";
+    response += "<p><a href='/board-edit' style='color:#ec8703;'>Edit Again</a></p>";
+    response += "<p><a href='/' style='color:#ec8703;'>Back to Home</a></p>";
+    response += "</body></html>";
+    sendResponse(response);
+}
+
+void WiFiManagerESP32::parseBoardEditData() {
+    // Parse the form data which contains r0c0, r0c1, etc.
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            String paramName = "r" + String(row) + "c" + String(col);
+            
+            if (server.hasArg(paramName)) {
+                String value = server.arg(paramName);
+                if (value.length() > 0) {
+                    pendingBoardEdit[row][col] = value.charAt(0);
+                } else {
+                    pendingBoardEdit[row][col] = ' ';
+                }
+            } else {
+                pendingBoardEdit[row][col] = ' ';
+            }
+        }
+    }
+    
+    hasPendingEdit = true;
+    Serial.println("Board edit received and stored");
+}
+
+bool WiFiManagerESP32::getPendingBoardEdit(char editBoard[8][8]) {
+    if (hasPendingEdit) {
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                editBoard[row][col] = pendingBoardEdit[row][col];
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+void WiFiManagerESP32::clearPendingEdit() {
+    hasPendingEdit = false;
 }
 

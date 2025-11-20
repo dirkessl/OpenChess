@@ -173,6 +173,24 @@ void loop() {
   // Handle WiFi clients
   wifiManager.handleClient();
   
+  // Check for pending board edits from WiFi
+  char editBoard[8][8];
+  if (wifiManager.getPendingBoardEdit(editBoard)) {
+    Serial.println("Applying board edit from WiFi interface...");
+    
+    if (currentMode == MODE_CHESS_MOVES && modeInitialized) {
+      chessMoves.setBoardState(editBoard);
+      Serial.println("Board edit applied to Chess Moves mode");
+    } else if (currentMode == MODE_CHESS_BOT && modeInitialized) {
+      chessBot.setBoardState(editBoard);
+      Serial.println("Board edit applied to Chess Bot mode");
+    } else {
+      Serial.println("Warning: Board edit received but no active game mode");
+    }
+    
+    wifiManager.clearPendingEdit();
+  }
+  
   // Update board state for WiFi display
   static unsigned long lastBoardUpdate = 0;
   if (millis() - lastBoardUpdate > 500) { // Update every 500ms

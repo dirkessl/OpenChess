@@ -34,6 +34,9 @@ public:
     
     // Get current board state for WiFi display
     void getBoardState(char boardState[8][8]);
+    
+    // Set board state for editing/corrections
+    void setBoardState(char newBoardState[8][8]);
 };
 
 #endif // CHESS_MOVES_H

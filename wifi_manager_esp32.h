@@ -42,10 +42,15 @@ private:
     char boardState[8][8];
     bool boardStateValid;
     
+    // Board edit storage (pending edits from web interface)
+    char pendingBoardEdit[8][8];
+    bool hasPendingEdit;
+    
     // Web interface methods
     String generateWebPage();
     String generateGameSelectionPage();
     String generateBoardViewPage();
+    String generateBoardEditPage();
     String generateBoardJSON();
     String getPieceSymbol(char piece);
     void handleRoot();
@@ -53,8 +58,10 @@ private:
     void handleConfigSubmit();
     void handleBoard();
     void handleBoardView();
+    void handleBoardEdit();
     void sendResponse(String content, String contentType = "text/html");
     void parseFormData(String data);
+    void parseBoardEditData();
     
 public:
     WiFiManagerESP32();
@@ -76,6 +83,10 @@ public:
     // Board state management
     void updateBoardState(char newBoardState[8][8]);
     bool hasValidBoardState() { return boardStateValid; }
+    
+    // Board edit management
+    bool getPendingBoardEdit(char editBoard[8][8]);
+    void clearPendingEdit();
 };
 
 #endif // WIFI_MANAGER_ESP32_H

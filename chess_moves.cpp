@@ -326,3 +326,15 @@ void ChessMoves::getBoardState(char boardState[8][8]) {
         }
     }
 }
+
+void ChessMoves::setBoardState(char newBoardState[8][8]) {
+    Serial.println("Board state updated via WiFi edit");
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            board[row][col] = newBoardState[row][col];
+        }
+    }
+    // Update sensor previous state to match new board
+    boardDriver->readSensors();
+    boardDriver->updateSensorPrev();
+}

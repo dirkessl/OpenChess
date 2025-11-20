@@ -2,7 +2,7 @@
 #define ARDUINO_SECRETS_H
 
 // WiFi Network Credentials
-#define SECRET_SSID "Kc iphone"
+#define SECRET_SSID "Fjordnet"
 #define SECRET_PASS "12345678"
 
 // Stockfish API Settings
