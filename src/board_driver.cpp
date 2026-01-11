@@ -121,32 +121,20 @@ void BoardDriver::clearAllLEDs()
     strip.show();
 }
 
-void BoardDriver::setSquareLED(int row, int col, uint32_t color)
+void BoardDriver::setSquareLED(int row, int col, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0)
 {
-    int pixelIndex = getPixelIndex(row, col);
-    strip.setPixelColor(pixelIndex, color);
-}
-
-void BoardDriver::setSquareLED(int row, int col, uint8_t r, uint8_t g, uint8_t b, uint8_t w)
-{
-    int pixelIndex = getPixelIndex(row, col);
     uint32_t color;
     float multiplier = 1.0f;
+    int pixelIndex = getPixelIndex(row, col);
     if (pixelIndex % 2 == 0)
         multiplier = 0.7f; // Dim dark squares to 70% brightness because they appear brighter due to the contrast
-    (w == 255 && r == 0 && g == 0 && b == 0) ? color = strip.Color(255 * multiplier, 255 * multiplier, 255 * multiplier) : color = strip.Color(r * multiplier, g * multiplier, b * multiplier);
+    (w == 255 && ((r == 0 && g == 0 && b == 0) || (r == 255 && g == 255 && b == 255))) ? color = strip.Color(255 * multiplier, 255 * multiplier, 255 * multiplier) : color = strip.Color(r * multiplier, g * multiplier, b * multiplier);
     strip.setPixelColor(pixelIndex, color);
 }
 
 void BoardDriver::showLEDs()
 {
     strip.show();
-}
-
-void BoardDriver::highlightSquare(int row, int col, uint32_t color)
-{
-    setSquareLED(row, col, color);
-    showLEDs();
 }
 
 void BoardDriver::blinkSquare(int row, int col, int times)
@@ -334,32 +322,21 @@ void BoardDriver::updateSetupDisplay(const char initialBoard[8][8])
     {
         for (int col = 0; col < 8; col++)
         {
-            int pixelIndex = getPixelIndex(row, col);
-
             // Check if a piece is detected on this square
             if (sensorState[row][col])
             {
                 // Determine color based on where the piece is placed
                 if (row <= 1)
-                {
-                    // Black side (top, rows 0-1) - White LED for black pieces
-                    strip.setPixelColor(pixelIndex, strip.Color(0, 0, 0, 255)); // White
-                }
+                    setSquareLED(row, col, 255, 255, 255); // White side (top, rows 0-1) - White LED
                 else if (row >= 6)
-                {
-                    // White side (bottom, rows 6-7) - Blue LED for white pieces
-                    strip.setPixelColor(pixelIndex, strip.Color(0, 0, 255)); // Blue
-                }
+                    setSquareLED(row, col, 0, 0, 255); // Black side (bottom, rows 6-7) - Blue LED
                 else
-                {
-                    // Middle rows (rows 2-5) - Red to indicate error (piece shouldn't be here)
-                    strip.setPixelColor(pixelIndex, strip.Color(255, 0, 0)); // Red
-                }
+                    setSquareLED(row, col, 255, 0, 0); // Middle rows (rows 2-5) - Red LED
             }
             else
             {
                 // No piece detected - turn off LED
-                strip.setPixelColor(pixelIndex, 0);
+                setSquareLED(row, col, 0, 0, 0);
             }
         }
     }
