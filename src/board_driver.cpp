@@ -137,6 +137,19 @@ void BoardDriver::showLEDs()
     strip.show();
 }
 
+void BoardDriver::showConnectingAnimation()
+{
+    // Show each WiFi connection attempt with animated LEDs
+    for (int i = 0; i < 8; i++)
+    {
+        setSquareLED(3, i, 0, 0, 255);
+        setSquareLED(4, i, 0, 0, 255);
+        showLEDs();
+        delay(100);
+    }
+    clearAllLEDs();
+}
+
 void BoardDriver::blinkSquare(int row, int col, uint8_t r, uint8_t g, uint8_t b, int times)
 {
     for (int i = 0; i < times; i++)

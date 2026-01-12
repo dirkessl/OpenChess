@@ -1,10 +1,12 @@
-#include "chess_bot.h"
 #include <Arduino.h>
+#include "chess_bot.h"
+#include "wifi_manager_esp32.h"
 
-ChessBot::ChessBot(BoardDriver *boardDriver, ChessEngine *chessEngine, BotDifficulty diff, bool playerWhite)
+ChessBot::ChessBot(BoardDriver *boardDriver, ChessEngine *chessEngine, WiFiManagerESP32 *wifiManager, BotDifficulty diff, bool playerWhite)
 {
     _boardDriver = boardDriver;
     _chessEngine = chessEngine;
+    _wifiManager = wifiManager;
     difficulty = diff;
     playerIsWhite = playerWhite;
 
@@ -64,9 +66,7 @@ void ChessBot::begin()
     _boardDriver->showLEDs();
 
     // Connect to WiFi
-    Serial.println("Connecting to WiFi...");
-
-    if (connectToWiFi())
+    if (_wifiManager->connectToWiFi(_wifiManager->getWiFiSSID(), _wifiManager->getWiFiPassword()))
     {
         Serial.println("WiFi connected! Bot mode ready.");
         wifiConnected = true;
@@ -343,83 +343,6 @@ void ChessBot::update()
     }
 
     _boardDriver->updateSensorPrev();
-}
-
-bool ChessBot::connectToWiFi()
-{
-#if defined(ESP32) || defined(ESP8266)
-    // ESP32/ESP8266 WiFi connection
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(SECRET_SSID);
-
-    WiFi.mode(WIFI_STA); // Set WiFi to station mode
-    WiFi.begin(SECRET_SSID, SECRET_PASS);
-
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20)
-    {
-        showConnectionStatus();
-        attempts++;
-
-        Serial.print("Connection attempt ");
-        Serial.print(attempts);
-        Serial.print("/20 - Status: ");
-        Serial.println(WiFi.status());
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        Serial.println("Connected to WiFi!");
-        Serial.print("IP address: ");
-        Serial.println(WiFi.localIP());
-        return true;
-    }
-    else
-    {
-        Serial.println("Failed to connect to WiFi");
-        return false;
-    }
-#elif defined(ARDUINO_SAMD_MKRWIFI1010) || defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT)
-    // WiFiNINA boards
-    // Check for WiFi module
-    if (WiFi.status() == WL_NO_MODULE)
-    {
-        Serial.println("WiFi module not found!");
-        return false;
-    }
-
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(SECRET_SSID);
-
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10)
-    {
-        WiFi.begin(SECRET_SSID, SECRET_PASS);
-        delay(5000);
-        attempts++;
-
-        Serial.print("Connection attempt ");
-        Serial.print(attempts);
-        Serial.print("/10 - Status: ");
-        Serial.println(WiFi.status());
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        Serial.println("Connected to WiFi!");
-        Serial.print("IP address: ");
-        Serial.println(WiFi.localIP());
-        return true;
-    }
-    else
-    {
-        Serial.println("Failed to connect to WiFi");
-        return false;
-    }
-#else
-    Serial.println("WiFi not supported on this board");
-    return false;
-#endif
 }
 
 String ChessBot::makeStockfishRequest(String fen)
@@ -1033,39 +956,11 @@ void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol)
 
 void ChessBot::showBotThinking()
 {
-    static unsigned long lastUpdate = 0;
-    static int thinkingStep = 0;
-
-    if (millis() - lastUpdate > 500)
-    {
-        // Animated thinking indicator - pulse the corners
-        _boardDriver->clearAllLEDs();
-
-        uint8_t brightness = (sin(thinkingStep * 0.3) + 1) * 127;
-
-        _boardDriver->setSquareLED(0, 0, 0, 0, brightness); // Corner LEDs pulse blue
-        _boardDriver->setSquareLED(0, 7, 0, 0, brightness);
-        _boardDriver->setSquareLED(7, 0, 0, 0, brightness);
-        _boardDriver->setSquareLED(7, 7, 0, 0, brightness);
-
-        _boardDriver->showLEDs();
-
-        thinkingStep++;
-        lastUpdate = millis();
-    }
-}
-
-void ChessBot::showConnectionStatus()
-{
-    // Show WiFi connection attempt with animated LEDs
-    for (int i = 0; i < 8; i++)
-    {
-        _boardDriver->setSquareLED(3, i, 0, 0, 255);
-        _boardDriver->setSquareLED(4, i, 0, 0, 255);
-        _boardDriver->showLEDs();
-        delay(100);
-    }
-    _boardDriver->clearAllLEDs();
+    _boardDriver->setSquareLED(0, 0, 0, 0, 255); // Corner LEDs blue
+    _boardDriver->setSquareLED(0, 7, 0, 0, 255);
+    _boardDriver->setSquareLED(7, 0, 0, 0, 255);
+    _boardDriver->setSquareLED(7, 7, 0, 0, 255);
+    _boardDriver->showLEDs();
 }
 
 void ChessBot::initializeBoard()

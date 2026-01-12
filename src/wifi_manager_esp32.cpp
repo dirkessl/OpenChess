@@ -1,19 +1,32 @@
-#include "wifi_manager_esp32.h"
 #include <Arduino.h>
+#include <Preferences.h>
+#include "wifi_manager_esp32.h"
 #include "arduino_secrets.h"
 
-WiFiManagerESP32::WiFiManagerESP32() : server(AP_PORT)
+extern "C"
 {
+#include "nvs_flash.h"
+}
+
+WiFiManagerESP32::WiFiManagerESP32(BoardDriver *boardDriver) : server(AP_PORT)
+{
+    _boardDriver = boardDriver;
     apMode = true;
     clientConnected = false;
-    wifiSSID = "";
-    wifiPassword = "";
-    lichessToken = "";
     gameMode = "None";
-    startupType = "WiFi";
     boardStateValid = false;
     hasPendingEdit = false;
     boardEvaluation = 0.0;
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        nvs_flash_erase(); // erase and retry
+        nvs_flash_init();
+    }
+    prefs.begin("wifiCreds", true);
+    wifiSSID = prefs.getString("ssid", SECRET_SSID);
+    wifiPassword = prefs.getString("pass", SECRET_PASS);
+    prefs.end();
 
     // Initialize board state to empty
     for (int row = 0; row < 8; row++)
@@ -51,29 +64,8 @@ void WiFiManagerESP32::begin()
 
     Serial.println("Debug: Access Point created successfully");
 
-    // Try to connect to existing WiFi (if credentials available)
-    bool connected = false;
-
-    if (wifiSSID.length() > 0 || strlen(SECRET_SSID) > 0)
-    {
-        String ssidToUse = wifiSSID.length() > 0 ? wifiSSID : String(SECRET_SSID);
-        String passToUse = wifiPassword.length() > 0 ? wifiPassword : String(SECRET_PASS);
-
-        Serial.println("=== Attempting to connect to WiFi network ===");
-        Serial.print("SSID: ");
-        Serial.println(ssidToUse);
-
-        connected = connectToWiFi(ssidToUse, passToUse);
-
-        if (connected)
-        {
-            Serial.println("Successfully connected to WiFi network!");
-        }
-        else
-        {
-            Serial.println("Failed to connect to WiFi. Access Point mode still available.");
-        }
-    }
+    // Try to connect to existing WiFi
+    bool connected = connectToWiFi(wifiSSID, wifiPassword) ? Serial.println("Successfully connected to WiFi network!") : Serial.println("Failed to connect to WiFi. Access Point mode still available.");
 
     // Wait a moment for everything to stabilize
     delay(100);
@@ -102,36 +94,45 @@ void WiFiManagerESP32::begin()
     Serial.println(WiFi.softAPmacAddress());
     Serial.println("=====================================");
 
-    // Set up web server routes
-    server.on("/", HTTP_GET, [this]()
-              { this->handleRoot(); });
-    server.on("/game", HTTP_GET, [this]()
-              { 
+    // Set up web server routes with async handlers
+    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
+              { this->handleRoot(request); });
+
+    server.on("/game", HTTP_GET, [this](AsyncWebServerRequest *request)
+              {
         String gameSelectionPage = this->generateGameSelectionPage();
-        this->server.send(200, "text/html", gameSelectionPage); });
-    server.on("/board", HTTP_GET, [this]()
-              { this->handleBoard(); });
-    server.on("/board-view", HTTP_GET, [this]()
-              { this->handleBoardView(); });
-    server.on("/board-edit", HTTP_GET, [this]()
-              { 
+        request->send(200, "text/html", gameSelectionPage); });
+
+    server.on("/board", HTTP_GET, [this](AsyncWebServerRequest *request)
+              { this->handleBoard(request); });
+
+    server.on("/board-view", HTTP_GET, [this](AsyncWebServerRequest *request)
+              { this->handleBoardView(request); });
+
+    server.on("/board-edit", HTTP_GET, [this](AsyncWebServerRequest *request)
+              {
         String boardEditPage = this->generateBoardEditPage();
-        this->server.send(200, "text/html", boardEditPage); });
-    server.on("/board-edit", HTTP_POST, [this]()
-              { this->handleBoardEdit(); });
-    server.on("/connect-wifi", HTTP_POST, [this]()
-              { this->handleConnectWiFi(); });
-    server.on("/submit", HTTP_POST, [this]()
-              { this->handleConfigSubmit(); });
-    server.on("/gameselect", HTTP_POST, [this]()
-              { this->handleGameSelection(); });
-    server.onNotFound([this]()
+        request->send(200, "text/html", boardEditPage); });
+
+    server.on("/board-edit", HTTP_POST, [this](AsyncWebServerRequest *request)
+              { this->handleBoardEdit(request); });
+
+    server.on("/connect-wifi", HTTP_POST, [this](AsyncWebServerRequest *request)
+              { this->handleConnectWiFi(request); });
+
+    server.on("/submit", HTTP_POST, [this](AsyncWebServerRequest *request)
+              { this->handleConfigSubmit(request); });
+
+    server.on("/gameselect", HTTP_POST, [this](AsyncWebServerRequest *request)
+              { this->handleGameSelection(request); });
+
+    server.onNotFound([this](AsyncWebServerRequest *request)
                       {
         String response = "<html><body style='font-family:Arial;background:#5c5d5e;color:#ec8703;text-align:center;padding:50px;'>";
         response += "<h2>404 - Page Not Found</h2>";
         response += "<p><a href='/' style='color:#ec8703;'>Back to Home</a></p>";
         response += "</body></html>";
-        this->sendResponse(response, "text/html"); });
+        request->send(404, "text/html", response); });
 
     // Start the web server
     Serial.println("Debug: Starting web server...");
@@ -140,347 +141,472 @@ void WiFiManagerESP32::begin()
     Serial.println("WiFi Manager initialization complete!");
 }
 
-void WiFiManagerESP32::handleClient()
-{
-    server.handleClient();
-}
-
-void WiFiManagerESP32::handleRoot()
+void WiFiManagerESP32::handleRoot(AsyncWebServerRequest *request)
 {
     String webpage = generateWebPage();
-    sendResponse(webpage);
+    sendResponse(request, webpage);
 }
 
-void WiFiManagerESP32::handleConfigSubmit()
+void WiFiManagerESP32::handleConfigSubmit(AsyncWebServerRequest *request)
 {
-    if (server.hasArg("plain"))
-    {
-        parseFormData(server.arg("plain"));
-    }
-    else
-    {
-        // Try to get form data from POST body
-        String body = "";
-        while (server.hasArg("ssid") || server.hasArg("password") || server.hasArg("token") ||
-               server.hasArg("gameMode") || server.hasArg("startupType"))
-        {
-            if (server.hasArg("ssid"))
-                wifiSSID = server.arg("ssid");
-            if (server.hasArg("password"))
-                wifiPassword = server.arg("password");
-            if (server.hasArg("token"))
-                lichessToken = server.arg("token");
-            if (server.hasArg("gameMode"))
-                gameMode = server.arg("gameMode");
-            if (server.hasArg("startupType"))
-                startupType = server.arg("startupType");
-            break;
-        }
-    }
+    // Parse form data from async request
+    if (request->hasArg("ssid"))
+        wifiSSID = request->arg("ssid");
+    if (request->hasArg("password"))
+        wifiPassword = request->arg("password");
+    Serial.println("Configuration updated:");
+    Serial.println("SSID: " + wifiSSID);
+    Serial.println("Password: " + wifiPassword);
+    prefs.begin("wifiCreds", false);
+    prefs.putString("ssid", wifiSSID);
+    prefs.putString("pass", wifiPassword);
+    prefs.end();
 
-    String response = "<html><body style='font-family:Arial;background:#5c5d5e;color:#ec8703;text-align:center;padding:50px;'>";
-    response += "<h2>Configuration Saved!</h2>";
-    response += "<p>WiFi SSID: " + wifiSSID + "</p>";
-    response += "<p>Game Mode: " + gameMode + "</p>";
-    response += "<p>Startup Type: " + startupType + "</p>";
-    response += "<p><a href='/game' style='color:#ec8703;'>Go to Game Selection</a></p>";
-    response += "</body></html>";
-    sendResponse(response);
+    String html = R"rawliteral(
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>OpenChess</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #5c5d5e;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+            }
+
+            .container {
+                background-color: #353434;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                padding: 30px;
+                width: 100%;
+                max-width: 500px;
+            }
+
+            h2 {
+                text-align: center;
+                color: #ec8703;
+                font-size: 30px;
+                margin-bottom: 20px;
+            }
+
+            h3 {
+                text-align: center;
+                color: #ec8703;
+                font-size: 16px;
+                margin-bottom: 20px;
+            }
+
+            label {
+                font-size: 16px;
+                color: #ec8703;
+                margin-bottom: 8px;
+                display: block;
+            }
+            
+            input[type="submit"], .button {
+                background-color: #ec8703;
+                color: white;
+                border: none;
+                padding: 15px;
+                font-size: 16px;
+                width: 100%;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.3s ease;
+                text-decoration: none;
+                display: block;
+                text-align: center;
+                margin: 10px auto;
+                box-sizing: border-box;
+            }
+
+            input[type="submit"]:hover, .button:hover {
+                background-color: #ebca13;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+        <h2>Configuration Saved!</h2>
+        <h3>
+            <span>WiFi SSID:</span>
+            <span style="color:#ffffff;">%SSID%</span>
+        </h3>
+            <h3>
+            <span>WiFi Password:</span>
+            <span style="color:#ffffff;">%PASSWORD%</span>
+        </h3>
+        <a href='/game' class="button">GameMode Selection</a>
+        </div>  
+    </body>
+</html>
+)rawliteral";
+    html.replace("%SSID%", wifiSSID);
+    html.replace("%PASSWORD%", wifiPassword);
+    sendResponse(request, html);
 }
 
-void WiFiManagerESP32::handleGameSelection()
+void WiFiManagerESP32::handleGameSelection(AsyncWebServerRequest *request)
 {
-    // Parse game mode selection
     int mode = 0;
 
-    if (server.hasArg("gamemode"))
+    if (request->hasArg("gamemode"))
     {
-        mode = server.arg("gamemode").toInt();
-    }
-    else if (server.hasArg("plain"))
-    {
-        // Try to parse from plain body
-        String body = server.arg("plain");
-        int modeStart = body.indexOf("gamemode=");
-        if (modeStart >= 0)
-        {
-            int modeEnd = body.indexOf("&", modeStart);
-            if (modeEnd < 0)
-                modeEnd = body.length();
-            String selectedMode = body.substring(modeStart + 9, modeEnd);
-            mode = selectedMode.toInt();
-        }
+        mode = request->arg("gamemode").toInt();
     }
 
     Serial.print("Game mode selected via web: ");
     Serial.println(mode);
 
-    // Store the selected game mode
     gameMode = String(mode);
 
     String response = "{\"status\":\"success\",\"message\":\"Game mode selected\",\"mode\":" + String(mode) + "}";
-    sendResponse(response, "application/json");
+    sendResponse(request, response, "application/json");
 }
 
-void WiFiManagerESP32::sendResponse(String content, String contentType)
+void WiFiManagerESP32::sendResponse(AsyncWebServerRequest *request, String content, String contentType)
 {
-    server.send(200, contentType, content);
+    request->send(200, contentType, content);
 }
 
 String WiFiManagerESP32::generateWebPage()
 {
-    String html = "<!DOCTYPE html>";
-    html += "<html lang=\"en\">";
-    html += "<head>";
-    html += "<meta charset=\"UTF-8\">";
-    html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
-    html += "<title>OPENCHESSBOARD CONFIGURATION</title>";
-    html += "<style>";
-    html += "body { font-family: Arial, sans-serif; background-color: #5c5d5e; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }";
-    html += ".container { background-color: #353434; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); padding: 30px; width: 100%; max-width: 500px; }";
-    html += "h2 { text-align: center; color: #ec8703; font-size: 24px; margin-bottom: 20px; }";
-    html += "label { font-size: 16px; color: #ec8703; margin-bottom: 8px; display: block; }";
-    html += "input[type=\"text\"], input[type=\"password\"], select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 16px; }";
-    html += "input[type=\"submit\"], .button { background-color: #ec8703; color: white; border: none; padding: 15px; font-size: 16px; width: 100%; border-radius: 5px; cursor: pointer; transition: background-color 0.3s ease; text-decoration: none; display: block; text-align: center; margin: 10px 0; }";
-    html += "input[type=\"submit\"]:hover, .button:hover { background-color: #ebca13; }";
-    html += ".form-group { margin-bottom: 15px; }";
-    html += ".note { font-size: 14px; color: #ec8703; text-align: center; margin-top: 20px; }";
-    html += "</style>";
-    html += "</head>";
-    html += "<body>";
-    html += "<div class=\"container\">";
-    html += "<h2>OPENCHESSBOARD CONFIGURATION</h2>";
-    html += "<form action=\"/submit\" method=\"POST\">";
+    String html = R"rawliteral(
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>OpenChess</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #5c5d5e;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+            }
 
-    html += "<div class=\"form-group\">";
-    html += "<label for=\"ssid\">WiFi SSID:</label>";
-    html += "<input type=\"text\" name=\"ssid\" id=\"ssid\" value=\"" + wifiSSID + "\" placeholder=\"Enter Your WiFi SSID\">";
-    html += "</div>";
+            .container {
+                background-color: #353434;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                padding: 30px;
+                width: 100%;
+                max-width: 500px;
+            }
 
-    html += "<div class=\"form-group\">";
-    html += "<label for=\"password\">WiFi Password:</label>";
-    html += "<input type=\"password\" name=\"password\" id=\"password\" value=\"\" placeholder=\"Enter Your WiFi Password\">";
-    html += "</div>";
+            h2 {
+                text-align: center;
+                color: #ec8703;
+                font-size: 30px;
+                margin-bottom: 20px;
+            }
 
-    html += "<div class=\"form-group\">";
-    html += "<label for=\"token\">Lichess Token (Optional):</label>";
-    html += "<input type=\"text\" name=\"token\" id=\"token\" value=\"" + lichessToken + "\" placeholder=\"Enter Your Lichess Token (Future Feature)\">";
-    html += "</div>";
+            label {
+                font-size: 16px;
+                color: #ec8703;
+                margin-bottom: 8px;
+                display: block;
+            }
 
-    html += "<div class=\"form-group\">";
-    html += "<label for=\"gameMode\">Default Game Mode:</label>";
-    html += "<select name=\"gameMode\" id=\"gameMode\">";
-    html += "<option value=\"None\"";
-    if (gameMode == "None")
-        html += " selected";
-    html += ">Local Chess Only</option>";
-    html += "<option value=\"5+3\"";
-    if (gameMode == "5+3")
-        html += " selected";
-    html += ">5+3 (Future)</option>";
-    html += "<option value=\"10+5\"";
-    if (gameMode == "10+5")
-        html += " selected";
-    html += ">10+5 (Future)</option>";
-    html += "<option value=\"15+10\"";
-    if (gameMode == "15+10")
-        html += " selected";
-    html += ">15+10 (Future)</option>";
-    html += "<option value=\"AI level 1\"";
-    if (gameMode == "AI level 1")
-        html += " selected";
-    html += ">AI level 1 (Future)</option>";
-    html += "<option value=\"AI level 2\"";
-    if (gameMode == "AI level 2")
-        html += " selected";
-    html += ">AI level 2 (Future)</option>";
-    html += "</select>";
-    html += "</div>";
+            input[type="text"], input[type="password"], select {
+                width: 100%;
+                padding: 10px;
+                margin: 10px 0;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                box-sizing: border-box;
+                font-size: 16px;
+            }
 
-    html += "<div class=\"form-group\">";
-    html += "<label for=\"startupType\">Default Startup Type:</label>";
-    html += "<select name=\"startupType\" id=\"startupType\">";
-    html += "<option value=\"WiFi\"";
-    if (startupType == "WiFi")
-        html += " selected";
-    html += ">WiFi Mode</option>";
-    html += "<option value=\"Local\"";
-    if (startupType == "Local")
-        html += " selected";
-    html += ">Local Mode</option>";
-    html += "</select>";
-    html += "</div>";
+            input[type="submit"], .button {
+                background-color: #ec8703;
+                color: white;
+                border: none;
+                padding: 15px;
+                font-size: 16px;
+                width: 100%;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.3s ease;
+                text-decoration: none;
+                display: block;
+                text-align: center;
+                margin: 10px auto;
+                box-sizing: border-box;
+            }
 
-    html += "<input type=\"submit\" value=\"Save Configuration\">";
-    html += "</form>";
+            input[type="submit"]:hover, .button:hover {
+                background-color: #ebca13;
+            }
 
-    // WiFi Connection Status
-    html += "<div class=\"form-group\" style=\"margin-top: 30px; padding: 15px; background-color: #444; border-radius: 5px;\">";
-    html += "<h3 style=\"color: #ec8703; margin-top: 0;\">WiFi Connection</h3>";
-    html += "<p style=\"color: #ec8703;\">Status: " + getConnectionStatus() + "</p>";
-    if (!isConnectedToWiFi() || wifiSSID.length() > 0)
-    {
-        html += "<form action=\"/connect-wifi\" method=\"POST\" style=\"margin-top: 15px;\">";
-        html += "<input type=\"hidden\" name=\"ssid\" value=\"" + wifiSSID + "\">";
-        html += "<input type=\"hidden\" name=\"password\" value=\"" + wifiPassword + "\">";
-        html += "<button type=\"submit\" class=\"button\" style=\"background-color: #4CAF50;\">Connect to WiFi</button>";
-        html += "</form>";
-        html += "<p style=\"font-size: 12px; color: #ec8703; margin-top: 10px;\">Enter WiFi credentials above and click 'Connect to WiFi' to join your network.</p>";
-    }
-    html += "</div>";
+            .form-group {
+                margin-bottom: 15px;
+            }
 
-    html += "<a href=\"/game\" class=\"button\">Game Selection Interface</a>";
-    html += "<a href=\"/board-view\" class=\"button\">View Chess Board</a>";
-    html += "<div class=\"note\">";
-    html += "<p>Configure your OpenChess board settings and WiFi connection.</p>";
-    html += "</div>";
-    html += "</div>";
-    html += "</body>";
-    html += "</html>";
-
+            .note {
+                font-size: 14px;
+                color: #ec8703;
+                text-align: center;
+                margin-top: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>OpenChess</h2>
+            <form action="/connect-wifi" method="POST">
+                <div class="form-group">
+                    <label for="ssid">WiFi SSID:</label>
+                    <input type="text" name="ssid" id="ssid" value="%SSID%" placeholder="Enter Your WiFi SSID">
+                </div>
+                <div class="form-group">
+                    <label for="password">WiFi Password:</label>
+                    <input type="text" name="password" id="password" value="%PASSWORD%" placeholder="Enter Your WiFi Password">
+                </div>
+                <input type="submit" value="Connect to WiFi">
+            </form>
+            <div class="form-group" style="margin-top: 30px; padding: 15px; background-color: #444; border-radius: 5px;">
+                <h3 style="color: #ec8703; margin-top: 0;">WiFi Connection</h3>
+                <p style="color: #ec8703;">Status: %STATUS%</p>
+            </div>
+            <a href="/game" class="button">GameMode Selection</a>
+            <a href="/board-view" class="button">View Chess Board</a>
+        </div>
+    </body>
+</html>
+    )rawliteral";
+    html.replace("%SSID%", wifiSSID);
+    html.replace("%PASSWORD%", wifiPassword);
+    html.replace("%STATUS%", getConnectionStatus());
     return html;
 }
 
 String WiFiManagerESP32::generateGameSelectionPage()
 {
-    String html = "<!DOCTYPE html>";
-    html += "<html lang=\"en\">";
-    html += "<head>";
-    html += "<meta charset=\"UTF-8\">";
-    html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
-    html += "<title>OPENCHESSBOARD GAME SELECTION</title>";
-    html += "<style>";
-    html += "body { font-family: Arial, sans-serif; background-color: #5c5d5e; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }";
-    html += ".container { background-color: #353434; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); padding: 30px; width: 100%; max-width: 600px; }";
-    html += "h2 { text-align: center; color: #ec8703; font-size: 24px; margin-bottom: 30px; }";
-    html += ".game-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }";
-    html += ".game-mode { background-color: #444; border: 2px solid #ec8703; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s ease; color: #fff; }";
-    html += ".game-mode:hover { background-color: #ec8703; transform: translateY(-2px); }";
-    html += ".game-mode.available { border-color: #4CAF50; }";
-    html += ".game-mode.coming-soon { border-color: #888; opacity: 0.6; }";
-    html += ".game-mode.mode-1 { border-color: #FF9800; background: linear-gradient(135deg, #444 0%, #FF9800 100%); }";
-    html += ".game-mode.mode-2 { border-color: #FFFFFF; background: linear-gradient(135deg, #444 0%, #FFFFFF 100%); }";
-    html += ".game-mode.mode-3 { border-color: #2196F3; background: linear-gradient(135deg, #444 0%, #2196F3 100%); }";
-    html += ".game-mode.mode-4 { border-color: #F44336; background: linear-gradient(135deg, #444 0%, #F44336 100%); }";
-    html += ".game-mode h3 { margin: 0 0 10px 0; font-size: 18px; }";
-    html += ".game-mode p { margin: 0; font-size: 14px; opacity: 0.8; }";
-    html += ".status { font-size: 12px; padding: 5px 10px; border-radius: 15px; margin-top: 10px; display: inline-block; }";
-    html += ".available .status { background-color: #4CAF50; color: white; }";
-    html += ".coming-soon .status { background-color: #888; color: white; }";
-    html += ".back-button { background-color: #666; color: white; border: none; padding: 15px; font-size: 16px; width: 100%; border-radius: 5px; cursor: pointer; text-decoration: none; display: block; text-align: center; margin-top: 20px; }";
-    html += ".back-button:hover { background-color: #777; }";
-    html += "</style>";
-    html += "</head>";
-    html += "<body>";
-    html += "<div class=\"container\">";
-    html += "<h2>GAME SELECTION</h2>";
-    html += "<div class=\"game-grid\">";
+    String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenChess GameMode Selection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #5c5d5e;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
 
-    html += "<div class=\"game-mode available mode-1\" onclick=\"selectGame(1)\">";
-    html += "<h3>Chess Moves</h3>";
-    html += "<p>Full chess game with move validation and animations</p>";
-    html += "<span class=\"status\">Available</span>";
-    html += "</div>";
+        .container {
+            background-color: #353434;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            width: 100%;
+            max-width: 600px;
+        }
 
-    html += "<div class=\"game-mode available mode-2\" onclick=\"selectGame(2)\">";
-    html += "<h3>Chess Bot</h3>";
-    html += "<p>Player White vs AI Black (Medium)</p>";
-    html += "<span class=\"status\">Available</span>";
-    html += "</div>";
+        h2 {
+            text-align: center;
+            color: #ec8703;
+            font-size: 30px;
+            margin-bottom: 30px;
+        }
 
-    html += "<div class=\"game-mode available mode-3\" onclick=\"selectGame(3)\">";
-    html += "<h3>Black AI Stockfish</h3>";
-    html += "<p>Player Black vs AI White</p>";
-    html += "<span class=\"status\">Available</span>";
-    html += "</div>";
+        .game-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
 
-    html += "<div class=\"game-mode available mode-4\" onclick=\"selectGame(4)\">";
-    html += "<h3>Sensor Test</h3>";
-    html += "<p>Test and calibrate board sensors</p>";
-    html += "<span class=\"status\">Available</span>";
-    html += "</div>";
+        .game-mode {
+            background-color: #444;
+            border: 2px solid #ec8703;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #fff;
+        }
 
-    html += "</div>";
-    html += "<a href=\"/board-view\" class=\"button\">View Chess Board</a>";
-    html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
-    html += "</div>";
+        .game-mode:hover {
+            background-color: #ec8703;
+            transform: translateY(-2px);
+        }
 
-    html += "<script>";
-    html += "function selectGame(mode) {";
-    html += "if (mode === 1 || mode === 2 || mode === 3 || mode === 4) {";
-    html += "fetch('/gameselect', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'gamemode=' + mode })";
-    html += ".then(response => response.text())";
-    html += ".then(data => { alert('Game mode ' + mode + ' selected! Check your chess board.'); })";
-    html += ".catch(error => { console.error('Error:', error); });";
-    html += "} else { alert('This game mode is coming soon!'); }";
-    html += "}";
-    html += "</script>";
-    html += "</body>";
-    html += "</html>";
+        .game-mode.available {
+            border-color: #4CAF50;
+        }
+
+        .game-mode.coming-soon {
+            border-color: #888;
+            opacity: 0.6;
+        }
+
+        .game-mode.mode-1 {
+            border-color: #FF9800;
+            background: linear-gradient(135deg, #444 0%, #FF9800 100%);
+        }
+
+        .game-mode.mode-2 {
+            border-color: #FFFFFF;
+            background: linear-gradient(135deg, #444 0%, #FFFFFF 100%);
+        }
+
+        .game-mode.mode-3 {
+            border-color: #2196F3;
+            background: linear-gradient(135deg, #444 0%, #2196F3 100%);
+        }
+
+        .game-mode.mode-4 {
+            border-color: #F44336;
+            background: linear-gradient(135deg, #444 0%, #F44336 100%);
+        }
+
+        .game-mode h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+
+        .game-mode p {
+            margin: 0;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .status {
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .available .status {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .coming-soon .status {
+            background-color: #888;
+            color: white;
+        }
+
+        .button {
+            background-color: #ec8703;
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 16px;
+            width: 100%;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            margin: 10px auto;
+            box-sizing: border-box;
+        }
+
+        input[type="submit"]:hover,
+        .button:hover {
+            background-color: #ebca13;
+        }
+
+        .back-button {
+            background-color: #666;
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 16px;
+            width: 100%;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            box-sizing: border-box;
+        }
+
+        .back-button:hover {
+            background-color: #777;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>GameMode Selection</h2>
+        <div class="game-grid">
+            <div class="game-mode available mode-1" onclick="selectGame(1)">
+                <h3>Chess Moves</h3>
+                <p>Human vs Human</p>
+                <p>Visualize available moves</p>
+            </div>
+            <div class="game-mode available mode-2" onclick="selectGame(2)">
+                <h3>White Bot</h3>
+                <p>Human vs White Bot</p>
+                <p>(Stockfish Medium)</p>
+            </div>
+            <div class="game-mode available mode-3" onclick="selectGame(3)">
+                <h3>Black Bot</h3>
+                <p>Human vs Black Bot</p>
+                <p>(Stockfish Medium)</p>
+            </div>
+            <div class="game-mode available mode-4" onclick="selectGame(4)">
+                <h3>Sensor Test</h3>
+                <p>Test board sensors</p>
+            </div>
+        </div>
+        <a href="/board-view" class="button">View Chess Board</a>
+        <a href="/" class="back-button">Back to Configuration</a>
+    </div>
+    <script>
+        function selectGame(mode) {
+            if (mode === 1 || mode === 2 || mode === 3 || mode === 4) {
+                fetch('/gameselect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'gamemode=' + mode
+                }).then(response => response.text()).then(data => {
+                    alert('Game mode ' + mode + ' selected! Check your chess board.');
+                }
+                ).catch(error => {
+                    console.error('Error:', error);
+                }
+                );
+            } else {
+                alert('This game mode is coming soon!');
+            }
+        }
+    </script>
+</body>
+</html>
+    )rawliteral";
 
     return html;
-}
-
-void WiFiManagerESP32::parseFormData(String data)
-{
-    // Parse URL-encoded form data
-    int ssidStart = data.indexOf("ssid=");
-    if (ssidStart >= 0)
-    {
-        int ssidEnd = data.indexOf("&", ssidStart);
-        if (ssidEnd < 0)
-            ssidEnd = data.length();
-        wifiSSID = data.substring(ssidStart + 5, ssidEnd);
-        wifiSSID.replace("+", " ");
-        wifiSSID.replace("%20", " ");
-    }
-
-    int passStart = data.indexOf("password=");
-    if (passStart >= 0)
-    {
-        int passEnd = data.indexOf("&", passStart);
-        if (passEnd < 0)
-            passEnd = data.length();
-        wifiPassword = data.substring(passStart + 9, passEnd);
-        wifiPassword.replace("+", " ");
-        wifiPassword.replace("%20", " ");
-    }
-
-    int tokenStart = data.indexOf("token=");
-    if (tokenStart >= 0)
-    {
-        int tokenEnd = data.indexOf("&", tokenStart);
-        if (tokenEnd < 0)
-            tokenEnd = data.length();
-        lichessToken = data.substring(tokenStart + 6, tokenEnd);
-        lichessToken.replace("+", " ");
-        lichessToken.replace("%20", " ");
-    }
-
-    int gameModeStart = data.indexOf("gameMode=");
-    if (gameModeStart >= 0)
-    {
-        int gameModeEnd = data.indexOf("&", gameModeStart);
-        if (gameModeEnd < 0)
-            gameModeEnd = data.length();
-        gameMode = data.substring(gameModeStart + 9, gameModeEnd);
-        gameMode.replace("+", " ");
-        gameMode.replace("%20", " ");
-    }
-
-    int startupStart = data.indexOf("startupType=");
-    if (startupStart >= 0)
-    {
-        int startupEnd = data.indexOf("&", startupStart);
-        if (startupEnd < 0)
-            startupEnd = data.length();
-        startupType = data.substring(startupStart + 12, startupEnd);
-    }
-
-    Serial.println("Configuration updated:");
-    Serial.println("SSID: " + wifiSSID);
-    Serial.println("Game Mode: " + gameMode);
-    Serial.println("Startup Type: " + startupType);
 }
 
 bool WiFiManagerESP32::isClientConnected()
@@ -516,7 +642,7 @@ void WiFiManagerESP32::updateBoardState(char newBoardState[8][8], float evaluati
     boardEvaluation = evaluation;
 }
 
-String WiFiManagerESP32::generateBoardJSON()
+void WiFiManagerESP32::handleBoard(AsyncWebServerRequest *request)
 {
     String json = "{";
     json += "\"board\":[";
@@ -549,56 +675,255 @@ String WiFiManagerESP32::generateBoardJSON()
     json += "\"valid\":" + String(boardStateValid ? "true" : "false");
     json += ",\"evaluation\":" + String(boardEvaluation, 2);
     json += "}";
-
-    return json;
+    sendResponse(request, json, "application/json");
 }
 
-void WiFiManagerESP32::handleBoard()
-{
-    String boardJSON = generateBoardJSON();
-    sendResponse(boardJSON, "application/json");
-}
-
-void WiFiManagerESP32::handleBoardView()
+void WiFiManagerESP32::handleBoardView(AsyncWebServerRequest *request)
 {
     String boardViewPage = generateBoardViewPage();
-    sendResponse(boardViewPage, "text/html");
+    sendResponse(request, boardViewPage, "text/html");
 }
 
 String WiFiManagerESP32::generateBoardViewPage()
 {
-    String html = "<!DOCTYPE html>";
-    html += "<html lang=\"en\">";
-    html += "<head>";
-    html += "<meta charset=\"UTF-8\">";
-    html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
-    html += "<meta http-equiv=\"refresh\" content=\"1\">"; // Auto-refreshing every 1 second (that's really stupid, the browser will show a white flash on every refresh, reloading only the board data via JS would be better)
-    html += "<title>OpenChess Board View</title>";
-    html += "<style>";
-    html += "body { font-family: Arial, sans-serif; background-color: #5c5d5e; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }";
-    html += ".container { background-color: #353434; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); padding: 30px; }";
-    html += "h2 { text-align: center; color: #ec8703; font-size: 24px; margin-bottom: 20px; }";
-    html += ".board-container { display: inline-block; }";
-    html += ".board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0; border: 3px solid #ec8703; width: 480px; height: 480px; }";
-    html += ".square { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: bold; }";
-    html += ".square.light { background-color: #f0d9b5; }";
-    html += ".square.dark { background-color: #b58863; }";
-    html += ".square .piece { text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }";
-    html += ".square .piece.white { color: #ffffff; }";
-    html += ".square .piece.black { color: #000000; }";
-    html += ".info { text-align: center; color: #ec8703; margin-top: 20px; font-size: 14px; }";
-    html += ".back-button { background-color: #666; color: white; border: none; padding: 15px; font-size: 16px; width: 100%; border-radius: 5px; cursor: pointer; text-decoration: none; display: block; text-align: center; margin-top: 20px; }";
-    html += ".back-button:hover { background-color: #777; }";
-    html += ".status { text-align: center; color: #ec8703; margin-bottom: 20px; }";
-    html += "</style>";
-    html += "</head>";
-    html += "<body>";
-    html += "<div class=\"container\">";
-    html += "<h2>CHESS BOARD</h2>";
+    String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenChess Board View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #5c5d5e;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
 
+        .container {
+            background-color: #353434;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #ec8703;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .board-container {
+            display: inline-block;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0;
+            border: 3px solid #ec8703;
+            width: 480px;
+            height: 480px;
+        }
+
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            font-weight: bold;
+        }
+
+        .square.light {
+            background-color: #f0d9b5;
+        }
+
+        .square.dark {
+            background-color: #b58863;
+        }
+
+        .square .piece {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .square .piece.white {
+            color: #ffffff;
+        }
+
+        .square .piece.black {
+            color: #000000;
+        }
+
+        .info {
+            text-align: center;
+            color: #ec8703;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .button {
+            background-color: #ec8703;
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 16px;
+            width: 100%;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            margin: 10px auto;
+            margin-top: 20px;
+            box-sizing: border-box;
+        }
+
+        .back-button {
+            background-color: #666;
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 16px;
+            width: 100%;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            box-sizing: border-box;
+        }
+
+        .back-button:hover {
+            background-color: #777;
+        }
+
+        .status {
+            text-align: center;
+            color: #ec8703;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Chess Board</h2>
+        %BOARD_HTML%
+        <div class="info">
+            <div id="evaluation" style="margin-top: 15px; padding: 15px; background-color: #444; border-radius: 5px;">
+                <div style="text-align: center; margin-bottom: 10px; color: #ec8703; font-weight: bold;">Stockfish
+                    Evaluation</div>
+                <div
+                    style="position: relative; width: 100%; height: 40px; background-color: #333; border: 2px solid #555; border-radius: 5px; overflow: hidden;">
+                    <div id="eval-bar"
+                        style="position: absolute; top: 0; left: 50%; width: 0%; height: 100%; background: linear-gradient(to right, #F44336 0%, #F44336 50%, #4CAF50 50%, #4CAF50 100%); transition: width 0.3s ease, left 0.3s ease;">
+                    </div>
+                    <div
+                        style="position: absolute; top: 0; left: 50%; width: 2px; height: 100%; background-color: #ec8703; z-index: 2;">
+                    </div>
+                    <div id="eval-arrow"
+                        style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; z-index: 3; color: #ec8703; transition: left 0.3s ease;">
+                        ⬌</div>
+                </div>
+                <div id="eval-text" style="text-align: center; margin-top: 10px; font-size: 14px; color: #ec8703;">--
+                </div>
+            </div>
+        </div>
+        <a href="/board-edit" class="button">Edit Board</a>
+        <a href="/" class="back-button">Back to Configuration</a>
+    </div>
+
+    <script>
+        // Fetch board state via AJAX for smoother updates
+        function updateBoard() {
+            fetch('/board').then(response => response.json()).then(data => {
+                if (data.valid) {
+                    // Update board display
+                    const squares = document.querySelectorAll('.square');
+                    let index = 0;
+                    for (let row = 0; row < 8; row++) {
+                        for (let col = 0; col < 8; col++) {
+                            const piece = data.board[row][col];
+                            const square = squares[index];
+                            if (piece && piece !== '') {
+                                const isWhite = piece === piece.toUpperCase();
+                                square.innerHTML = '<span class="piece ' + (isWhite ? 'white' : 'black') + '">' + getPieceSymbol(piece) + '</span>';
+                            } else {
+                                square.innerHTML = '';
+                            } index++;
+                        }
+                    }
+                    // Update evaluation bar
+                    if (data.evaluation !== undefined) {
+                        const evalValue = data.evaluation;
+                        const evalInPawns = (evalValue / 100).toFixed(2);
+                        const maxEval = 1000;
+                        // Maximum evaluation to display (10 pawns)
+                        const clampedEval = Math.max(-maxEval, Math.min(maxEval, evalValue));
+                        const percentage = Math.abs(clampedEval) / maxEval * 50;
+                        // Max 50% on each side
+                        const bar = document.getElementById('eval-bar');
+                        const arrow = document.getElementById('eval-arrow');
+                        const text = document.getElementById('eval-text');
+                        let evalText = '';
+                        let arrowSymbol = '⬌';
+                        if (evalValue > 0) {
+                            bar.style.left = '50%';
+                            bar.style.width = percentage + '%';
+                            bar.style.background = 'linear-gradient(to right, #ec8703 0%, #4CAF50 100%)';
+                            arrow.style.left = (50 + percentage) + '%';
+                            arrowSymbol = '→';
+                            arrow.style.color = '#4CAF50';
+                            evalText = '+' + evalInPawns + ' (White advantage)';
+                        } else if (evalValue < 0) {
+                            bar.style.left = (50 - percentage) + '%';
+                            bar.style.width = percentage + '%';
+                            bar.style.background = 'linear-gradient(to right, #F44336 0%, #ec8703 100%)';
+                            arrow.style.left = (50 - percentage) + '%';
+                            arrowSymbol = '←';
+                            arrow.style.color = '#F44336';
+                            evalText = evalInPawns + ' (Black advantage)';
+                        } else {
+                            bar.style.left = '50%';
+                            bar.style.width = '0%';
+                            bar.style.background = '#ec8703';
+                            arrow.style.left = '50%';
+                            arrowSymbol = '⬌';
+                            arrow.style.color = '#ec8703';
+                            evalText = '0.00 (Equal)';
+                        } arrow.textContent = arrowSymbol;
+                        text.textContent = evalText;
+                        text.style.color = arrow.style.color;
+                    }
+                }
+            });
+        }
+        
+        function getPieceSymbol(piece) {
+            if (!piece) return '';
+            const symbols = { 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙', 'r': '♖', 'n': '♘', 'b': '♗', 'q': '♕', 'k': '♔', 'p': '♙' };
+            return symbols[piece] || piece;
+        }
+        
+        setInterval(updateBoard, 250);
+    </script>
+</body>
+</html>
+    )rawliteral";
+
+    String boardHTML = "";
     if (boardStateValid)
     {
-        html += "<div class=\"status\">Board state: Active</div>";
+        boardHTML += "<div class=\"status\">Board state: Active</div>";
         // Show evaluation if available (for Chess Bot mode)
         if (boardEvaluation != 0.0)
         {
@@ -615,12 +940,12 @@ String WiFiManagerESP32::generateBoardViewPage()
                 evalText = String(evalInPawns, 2) + " (Black advantage)";
                 evalColor = "#F44336";
             }
-            html += "<div class=\"status\" style=\"color: " + evalColor + ";\">";
-            html += "Stockfish Evaluation: " + evalText;
-            html += "</div>";
+            boardHTML += "<div class=\"status\" style=\"color: " + evalColor + ";\">";
+            boardHTML += "Stockfish Evaluation: " + evalText;
+            boardHTML += "</div>";
         }
-        html += "<div class=\"board-container\">";
-        html += "<div class=\"board\">";
+        boardHTML += "<div class=\"board-container\">";
+        boardHTML += "<div class=\"board\">";
 
         // Generate board squares
         for (int row = 0; row < 8; row++)
@@ -630,123 +955,28 @@ String WiFiManagerESP32::generateBoardViewPage()
                 bool isLight = (row + col) % 2 == 0;
                 char piece = boardState[row][col];
 
-                html += "<div class=\"square " + String(isLight ? "light" : "dark") + "\">";
+                boardHTML += "<div class=\"square " + String(isLight ? "light" : "dark") + "\">";
 
                 if (piece != ' ')
                 {
                     bool isWhite = (piece >= 'A' && piece <= 'Z');
                     String pieceSymbol = getPieceSymbol(piece);
-                    html += "<span class=\"piece " + String(isWhite ? "white" : "black") + "\">" + pieceSymbol + "</span>";
+                    boardHTML += "<span class=\"piece " + String(isWhite ? "white" : "black") + "\">" + pieceSymbol + "</span>";
                 }
 
-                html += "</div>";
+                boardHTML += "</div>";
             }
         }
 
-        html += "</div>";
-        html += "</div>";
+        boardHTML += "</div>";
+        boardHTML += "</div>";
     }
     else
     {
-        html += "<div class=\"status\">Board state: Not available</div>";
-        html += "<p style=\"text-align: center; color: #ec8703;\">No active game detected. Start a game to view the board.</p>";
+        boardHTML += "<div class=\"status\">Board state: Not available</div>";
+        boardHTML += "<p style=\"text-align: center; color: #ec8703;\">No active game detected. Start a game to view the board.</p>";
     }
-
-    html += "<div class=\"info\">";
-    html += "<p>Auto-refreshing every 1 second</p>";
-    html += "<div id=\"evaluation\" style=\"margin-top: 15px; padding: 15px; background-color: #444; border-radius: 5px;\">";
-    html += "<div style=\"text-align: center; margin-bottom: 10px; color: #ec8703; font-weight: bold;\">Stockfish Evaluation</div>";
-    html += "<div style=\"position: relative; width: 100%; height: 40px; background-color: #333; border: 2px solid #555; border-radius: 5px; overflow: hidden;\">";
-    html += "<div id=\"eval-bar\" style=\"position: absolute; top: 0; left: 50%; width: 0%; height: 100%; background: linear-gradient(to right, #F44336 0%, #F44336 50%, #4CAF50 50%, #4CAF50 100%); transition: width 0.3s ease, left 0.3s ease;\"></div>";
-    html += "<div style=\"position: absolute; top: 0; left: 50%; width: 2px; height: 100%; background-color: #ec8703; z-index: 2;\"></div>";
-    html += "<div id=\"eval-arrow\" style=\"position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; z-index: 3; color: #ec8703; transition: left 0.3s ease;\">⬌</div>";
-    html += "</div>";
-    html += "<div id=\"eval-text\" style=\"text-align: center; margin-top: 10px; font-size: 14px; color: #ec8703;\">--</div>";
-    html += "</div>";
-    html += "</div>";
-    html += "<a href=\"/board-edit\" class=\"button\">Edit Board</a>";
-    html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
-    html += "</div>";
-
-    html += "<script>";
-    html += "// Fetch board state via AJAX for smoother updates";
-    html += "function updateBoard() {";
-    html += "fetch('/board')";
-    html += ".then(response => response.json())";
-    html += ".then(data => {";
-    html += "if (data.valid) {";
-    html += "// Update board display";
-    html += "const squares = document.querySelectorAll('.square');";
-    html += "let index = 0;";
-    html += "for (let row = 0; row < 8; row++) {";
-    html += "for (let col = 0; col < 8; col++) {";
-    html += "const piece = data.board[row][col];";
-    html += "const square = squares[index];";
-    html += "if (piece && piece !== '') {";
-    html += "const isWhite = piece === piece.toUpperCase();";
-    html += "square.innerHTML = '<span class=\"piece ' + (isWhite ? 'white' : 'black') + '\">' + getPieceSymbol(piece) + '</span>';";
-    html += "} else {";
-    html += "square.innerHTML = '';";
-    html += "}";
-    html += "index++;";
-    html += "}";
-    html += "}";
-    html += "// Update evaluation bar";
-    html += "if (data.evaluation !== undefined) {";
-    html += "const evalValue = data.evaluation;";
-    html += "const evalInPawns = (evalValue / 100).toFixed(2);";
-    html += "const maxEval = 1000; // Maximum evaluation to display (10 pawns)";
-    html += "const clampedEval = Math.max(-maxEval, Math.min(maxEval, evalValue));";
-    html += "const percentage = Math.abs(clampedEval) / maxEval * 50; // Max 50% on each side";
-    html += "const bar = document.getElementById('eval-bar');";
-    html += "const arrow = document.getElementById('eval-arrow');";
-    html += "const text = document.getElementById('eval-text');";
-    html += "let evalText = '';";
-    html += "let arrowSymbol = '⬌';";
-    html += "if (evalValue > 0) {";
-    html += "bar.style.left = '50%';";
-    html += "bar.style.width = percentage + '%';";
-    html += "bar.style.background = 'linear-gradient(to right, #ec8703 0%, #4CAF50 100%)';";
-    html += "arrow.style.left = (50 + percentage) + '%';";
-    html += "arrowSymbol = '→';";
-    html += "arrow.style.color = '#4CAF50';";
-    html += "evalText = '+' + evalInPawns + ' (White advantage)';";
-    html += "} else if (evalValue < 0) {";
-    html += "bar.style.left = (50 - percentage) + '%';";
-    html += "bar.style.width = percentage + '%';";
-    html += "bar.style.background = 'linear-gradient(to right, #F44336 0%, #ec8703 100%)';";
-    html += "arrow.style.left = (50 - percentage) + '%';";
-    html += "arrowSymbol = '←';";
-    html += "arrow.style.color = '#F44336';";
-    html += "evalText = evalInPawns + ' (Black advantage)';";
-    html += "} else {";
-    html += "bar.style.left = '50%';";
-    html += "bar.style.width = '0%';";
-    html += "bar.style.background = '#ec8703';";
-    html += "arrow.style.left = '50%';";
-    html += "arrowSymbol = '⬌';";
-    html += "arrow.style.color = '#ec8703';";
-    html += "evalText = '0.00 (Equal)';";
-    html += "}";
-    html += "arrow.textContent = arrowSymbol;";
-    html += "text.textContent = evalText;";
-    html += "text.style.color = arrow.style.color;";
-    html += "}";
-    html += "}";
-    html += "});";
-    html += "}";
-    html += "function getPieceSymbol(piece) {";
-    html += "if (!piece) return '';";
-    html += "const symbols = {";
-    html += "'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙',";
-    html += "'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟'";
-    html += "};";
-    html += "return symbols[piece] || piece;";
-    html += "}";
-    html += "setInterval(updateBoard, 2000);";
-    html += "</script>";
-    html += "</body>";
-    html += "</html>";
+    html.replace("%BOARD_HTML%", boardHTML);
 
     return html;
 }
@@ -786,129 +1016,247 @@ String WiFiManagerESP32::getPieceSymbol(char piece)
 
 String WiFiManagerESP32::generateBoardEditPage()
 {
-    String html = "<!DOCTYPE html>";
-    html += "<html lang=\"en\">";
-    html += "<head>";
-    html += "<meta charset=\"UTF-8\">";
-    html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
-    html += "<title>Edit Chess Board</title>";
-    html += "<style>";
-    html += "body { font-family: Arial, sans-serif; background-color: #5c5d5e; margin: 0; padding: 20px; }";
-    html += ".container { background-color: #353434; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); padding: 30px; max-width: 800px; margin: 0 auto; }";
-    html += "h2 { text-align: center; color: #ec8703; font-size: 24px; margin-bottom: 20px; }";
-    html += ".board-container { display: inline-block; margin: 20px auto; }";
-    html += ".board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0; border: 3px solid #ec8703; width: 480px; height: 480px; }";
-    html += ".square { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; position: relative; }";
-    html += ".square.light { background-color: #f0d9b5; }";
-    html += ".square.dark { background-color: #b58863; }";
-    html += ".square:hover { background-color: #ec8703 !important; opacity: 0.8; }";
-    html += ".square select { width: 100%; height: 100%; border: none; background: transparent; font-size: 32px; text-align: center; cursor: pointer; appearance: none; -webkit-appearance: none; -moz-appearance: none; }";
-    html += ".square select:focus { outline: 2px solid #ec8703; }";
-    html += ".controls { text-align: center; margin-top: 20px; }";
-    html += ".button { background-color: #ec8703; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 10px; }";
-    html += ".button:hover { background-color: #ebca13; }";
-    html += ".button.secondary { background-color: #666; }";
-    html += ".button.secondary:hover { background-color: #777; }";
-    html += ".info { text-align: center; color: #ec8703; margin-top: 20px; font-size: 14px; }";
-    html += ".back-button { background-color: #666; color: white; border: none; padding: 15px; font-size: 16px; width: 100%; border-radius: 5px; cursor: pointer; text-decoration: none; display: block; text-align: center; margin-top: 20px; }";
-    html += ".back-button:hover { background-color: #777; }";
-    html += ".status { text-align: center; color: #ec8703; margin-bottom: 20px; padding: 10px; background-color: #444; border-radius: 5px; }";
-    html += "</style>";
-    html += "</head>";
-    html += "<body>";
-    html += "<div class=\"container\">";
-    html += "<h2>EDIT CHESS BOARD</h2>";
-    html += "<div class=\"status\">Click on any square to change the piece. Empty = no piece.</div>";
+    String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Edit Chess Board</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #5c5d5e;
+                margin: 0;
+                padding: 20px;
+            }
 
-    html += "<form id=\"boardForm\" method=\"POST\" action=\"/board-edit\">";
-    html += "<div class=\"board-container\">";
-    html += "<div class=\"board\">";
+            .container {
+                background-color: #353434;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                padding: 30px;
+                max-width: 800px;
+                margin: 0 auto;
+            }
+
+            h2 {
+                text-align: center;
+                color: #ec8703;
+                font-size: 24px;
+                margin-bottom: 20px;
+            }
+
+            .board-container {
+                display: inline-block;
+                margin: 20px auto;
+            }
+
+            .board {
+                display: grid;
+                grid-template-columns: repeat(8, 1fr);
+                gap: 0;
+                border: 3px solid #ec8703;
+                width: 480px;
+                height: 480px;
+            }
+
+            .square {
+                width: 60px;
+                height: 60px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+            }
+
+            .square.light {
+                background-color: #f0d9b5;
+            }
+
+            .square.dark {
+                background-color: #b58863;
+            }
+
+            .square:hover {
+                background-color: #ec8703 !important;
+                opacity: 0.8;
+            }
+
+            .square select {
+                width: 100%;
+                height: 100%;
+                border: none;
+                background: transparent;
+                font-size: 32px;
+                text-align: center;
+                cursor: pointer;
+                appearance: none;
+                -webkit-appearance: none;
+                -moz-appearance: none;
+            }
+
+            .square select:focus {
+                outline: 2px solid #ec8703;
+            }
+
+            .controls {
+                text-align: center;
+                margin-top: 20px;
+            }
+
+            .button {
+                background-color: #ec8703;
+                color: white;
+                border: none;
+                padding: 15px 30px;
+                font-size: 16px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin: 10px;
+            }
+
+            .button:hover {
+                background-color: #ebca13;
+            }
+
+            .button.secondary {
+                background-color: #666;
+            }
+
+            .button.secondary:hover {
+                background-color: #777;
+            }
+
+            .info {
+                text-align: center;
+                color: #ec8703;
+                margin-top: 20px;
+                font-size: 14px;
+            }
+
+            .back-button {
+                background-color: #666;
+                color: white;
+                border: none;
+                padding: 15px;
+                font-size: 16px;
+                width: 100%;
+                border-radius: 5px;
+                cursor: pointer;
+                text-decoration: none;
+                display: block;
+                text-align: center;
+                margin-top: 20px;
+                box-sizing: border-box;
+            }
+
+            .back-button:hover {
+                background-color: #777;
+            }
+
+            .status {
+                text-align: center;
+                color: #ec8703;
+                margin-bottom: 20px;
+                padding: 10px;
+                background-color: #444;
+                border-radius: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Edit Chess Board</h2>
+            <div class="status">Click on any square to change the piece. Empty = no piece.</div>
+            <form id="boardForm" method="POST" action="/board-edit">
+                <div class="board-container">
+                    <div class="board">
+                    %BOARD_HTML%
+                    </div>
+                </div>
+                <div class="controls">
+                    <button type="submit" class="button">Apply Changes</button>
+                    <button type="button" class="button secondary" onclick="loadCurrentBoard()">Reload Current Board</button>
+                    <button type="button" class="button secondary" onclick="clearBoard()">Clear All</button>
+                </div>
+            </form>
+            <div class="info">
+                <p>
+                    <strong>Instructions:</strong>
+                </p>
+                <p>• Uppercase letters (R,N,B,Q,K,P) = White pieces</p>
+                <p>• Lowercase letters (r,n,b,q,k,p) = Black pieces</p>
+                <p>• Empty = No piece on that square</p>
+                <p>• Click 'Apply Changes' to update the physical board</p>
+            </div>
+            <a href="/board-view" class="back-button">View Board</a>
+            <a href="/" class="back-button">Back to Configuration</a>
+        </div>
+        <script>
+            function loadCurrentBoard() {
+                fetch('/board').then(response => response.json()).then(data => {
+                    if (data.valid) {
+                        for (let row = 0; row < 8; row++) {
+                            for (let col = 0; col < 8; col++) {
+                                const piece = data.board[row][col] || '';
+                                const select = document.getElementById('r' + row + 'c' + col);
+                                select.value = piece;
+                            }
+                        }
+                    }
+                }
+                );
+            }
+            function clearBoard() {
+                if (confirm('Clear all pieces from the board?')) {
+                    for (let row = 0; row < 8; row++) {
+                        for (let col = 0; col < 8; col++) {
+                            document.getElementById('r' + row + 'c' + col).value = '';
+                        }
+                    }
+                }
+            }
+        </script>
+    </body>
+</html>
+    )rawliteral";
 
     // Generate editable board squares
+    String boardHTML = "";
     for (int row = 0; row < 8; row++)
     {
         for (int col = 0; col < 8; col++)
         {
             bool isLight = (row + col) % 2 == 0;
             char piece = boardState[row][col];
-
-            html += "<div class=\"square " + String(isLight ? "light" : "dark") + "\">";
-            html += "<select name=\"r" + String(row) + "c" + String(col) + "\" id=\"r" + String(row) + "c" + String(col) + "\">";
-            html += "<option value=\"\"" + String(piece == ' ' ? " selected" : "") + "></option>";
-            html += "<option value=\"R\"" + String(piece == 'R' ? " selected" : "") + ">♖ R</option>";
-            html += "<option value=\"N\"" + String(piece == 'N' ? " selected" : "") + ">♘ N</option>";
-            html += "<option value=\"B\"" + String(piece == 'B' ? " selected" : "") + ">♗ B</option>";
-            html += "<option value=\"Q\"" + String(piece == 'Q' ? " selected" : "") + ">♕ Q</option>";
-            html += "<option value=\"K\"" + String(piece == 'K' ? " selected" : "") + ">♔ K</option>";
-            html += "<option value=\"P\"" + String(piece == 'P' ? " selected" : "") + ">♙ P</option>";
-            html += "<option value=\"r\"" + String(piece == 'r' ? " selected" : "") + ">♜ r</option>";
-            html += "<option value=\"n\"" + String(piece == 'n' ? " selected" : "") + ">♞ n</option>";
-            html += "<option value=\"b\"" + String(piece == 'b' ? " selected" : "") + ">♝ b</option>";
-            html += "<option value=\"q\"" + String(piece == 'q' ? " selected" : "") + ">♛ q</option>";
-            html += "<option value=\"k\"" + String(piece == 'k' ? " selected" : "") + ">♚ k</option>";
-            html += "<option value=\"p\"" + String(piece == 'p' ? " selected" : "") + ">♟ p</option>";
-            html += "</select>";
-            html += "</div>";
+            boardHTML += "<div class=\"square " + String(isLight ? "light" : "dark") + "\">";
+            boardHTML += "<select name=\"r" + String(row) + "c" + String(col) + "\" id=\"r" + String(row) + "c" + String(col) + "\">";
+            boardHTML += "<option value=\"\"" + String(piece == ' ' ? " selected" : "") + "></option>";
+            boardHTML += "<option value=\"R\"" + String(piece == 'R' ? " selected" : "") + ">♖ R</option>";
+            boardHTML += "<option value=\"N\"" + String(piece == 'N' ? " selected" : "") + ">♘ N</option>";
+            boardHTML += "<option value=\"B\"" + String(piece == 'B' ? " selected" : "") + ">♗ B</option>";
+            boardHTML += "<option value=\"Q\"" + String(piece == 'Q' ? " selected" : "") + ">♕ Q</option>";
+            boardHTML += "<option value=\"K\"" + String(piece == 'K' ? " selected" : "") + ">♔ K</option>";
+            boardHTML += "<option value=\"P\"" + String(piece == 'P' ? " selected" : "") + ">♙ P</option>";
+            boardHTML += "<option value=\"r\"" + String(piece == 'r' ? " selected" : "") + ">♜ r</option>";
+            boardHTML += "<option value=\"n\"" + String(piece == 'n' ? " selected" : "") + ">♞ n</option>";
+            boardHTML += "<option value=\"b\"" + String(piece == 'b' ? " selected" : "") + ">♝ b</option>";
+            boardHTML += "<option value=\"q\"" + String(piece == 'q' ? " selected" : "") + ">♛ q</option>";
+            boardHTML += "<option value=\"k\"" + String(piece == 'k' ? " selected" : "") + ">♚ k</option>";
+            boardHTML += "<option value=\"p\"" + String(piece == 'p' ? " selected" : "") + ">♟ p</option>";
+            boardHTML += "</select>";
+            boardHTML += "</div>";
         }
     }
-
-    html += "</div>";
-    html += "</div>";
-
-    html += "<div class=\"controls\">";
-    html += "<button type=\"submit\" class=\"button\">Apply Changes</button>";
-    html += "<button type=\"button\" class=\"button secondary\" onclick=\"loadCurrentBoard()\">Reload Current Board</button>";
-    html += "<button type=\"button\" class=\"button secondary\" onclick=\"clearBoard()\">Clear All</button>";
-    html += "</div>";
-    html += "</form>";
-
-    html += "<div class=\"info\">";
-    html += "<p><strong>Instructions:</strong></p>";
-    html += "<p>• Uppercase letters (R,N,B,Q,K,P) = White pieces</p>";
-    html += "<p>• Lowercase letters (r,n,b,q,k,p) = Black pieces</p>";
-    html += "<p>• Empty = No piece on that square</p>";
-    html += "<p>• Click 'Apply Changes' to update the physical board</p>";
-    html += "</div>";
-
-    html += "<a href=\"/board-view\" class=\"back-button\">View Board</a>";
-    html += "<a href=\"/\" class=\"back-button\">Back to Configuration</a>";
-    html += "</div>";
-
-    html += "<script>";
-    html += "function loadCurrentBoard() {";
-    html += "fetch('/board')";
-    html += ".then(response => response.json())";
-    html += ".then(data => {";
-    html += "if (data.valid) {";
-    html += "for (let row = 0; row < 8; row++) {";
-    html += "for (let col = 0; col < 8; col++) {";
-    html += "const piece = data.board[row][col] || '';";
-    html += "const select = document.getElementById('r' + row + 'c' + col);";
-    html += "select.value = piece;";
-    html += "}";
-    html += "}";
-    html += "}";
-    html += "});";
-    html += "}";
-    html += "function clearBoard() {";
-    html += "if (confirm('Clear all pieces from the board?')) {";
-    html += "for (let row = 0; row < 8; row++) {";
-    html += "for (let col = 0; col < 8; col++) {";
-    html += "document.getElementById('r' + row + 'c' + col).value = '';";
-    html += "}";
-    html += "}";
-    html += "}";
-    html += "}";
-    html += "</script>";
-    html += "</body>";
-    html += "</html>";
+    html.replace("%BOARD_HTML%", boardHTML);
 
     return html;
 }
 
-void WiFiManagerESP32::handleBoardEdit()
+void WiFiManagerESP32::handleBoardEdit(AsyncWebServerRequest *request)
 {
-    parseBoardEditData();
+    parseBoardEditData(request);
 
     String response = "<html><body style='font-family:Arial;background:#5c5d5e;color:#ec8703;text-align:center;padding:50px;'>";
     response += "<h2>Board Updated!</h2>";
@@ -917,21 +1265,20 @@ void WiFiManagerESP32::handleBoardEdit()
     response += "<p><a href='/board-edit' style='color:#ec8703;'>Edit Again</a></p>";
     response += "<p><a href='/' style='color:#ec8703;'>Back to Home</a></p>";
     response += "</body></html>";
-    sendResponse(response);
+    sendResponse(request, response);
 }
 
-void WiFiManagerESP32::parseBoardEditData()
+void WiFiManagerESP32::parseBoardEditData(AsyncWebServerRequest *request)
 {
-    // Parse the form data which contains r0c0, r0c1, etc.
     for (int row = 0; row < 8; row++)
     {
         for (int col = 0; col < 8; col++)
         {
             String paramName = "r" + String(row) + "c" + String(col);
 
-            if (server.hasArg(paramName))
+            if (request->hasArg(paramName.c_str()))
             {
-                String value = server.arg(paramName);
+                String value = request->arg(paramName.c_str());
                 if (value.length() > 0)
                 {
                     pendingBoardEdit[row][col] = value.charAt(0);
@@ -975,9 +1322,19 @@ void WiFiManagerESP32::clearPendingEdit()
 
 bool WiFiManagerESP32::connectToWiFi(String ssid, String password)
 {
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.println("Already connected to WiFi");
+        Serial.print("IP address: ");
+        Serial.println(WiFi.localIP());
+        apMode = false; // We're connected, but AP is still running
+        return true;
+    }
     Serial.println("=== Connecting to WiFi Network ===");
     Serial.print("SSID: ");
     Serial.println(ssid);
+    Serial.print("Password: ");
+    Serial.println(password);
 
     // ESP32 can run both AP and Station modes simultaneously
     WiFi.mode(WIFI_AP_STA); // Enable both AP and Station modes
@@ -985,13 +1342,13 @@ bool WiFiManagerESP32::connectToWiFi(String ssid, String password)
     WiFi.begin(ssid.c_str(), password.c_str());
 
     int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20)
+    while (WiFi.status() != WL_CONNECTED && attempts < 10)
     {
-        delay(500);
+        _boardDriver->showConnectingAnimation();
         attempts++;
         Serial.print("Connection attempt ");
         Serial.print(attempts);
-        Serial.print("/20 - Status: ");
+        Serial.print("/10 - Status: ");
         Serial.println(WiFi.status());
     }
 
@@ -1050,19 +1407,18 @@ String WiFiManagerESP32::getConnectionStatus()
     return status;
 }
 
-void WiFiManagerESP32::handleConnectWiFi()
+void WiFiManagerESP32::handleConnectWiFi(AsyncWebServerRequest *request)
 {
-    // Parse WiFi credentials from POST
-    if (server.hasArg("ssid"))
+    if (request->hasArg("ssid"))
     {
-        wifiSSID = server.arg("ssid");
+        wifiSSID = request->arg("ssid");
     }
-    if (server.hasArg("password"))
+    if (request->hasArg("password"))
     {
-        wifiPassword = server.arg("password");
+        wifiPassword = request->arg("password");
     }
 
-    if (wifiSSID.length() > 0)
+    if (wifiSSID.length() > 0 && wifiPassword.length() > 0)
     {
         Serial.println("Attempting to connect to WiFi from web interface...");
         bool connected = connectToWiFi(wifiSSID, wifiPassword);
@@ -1075,6 +1431,10 @@ void WiFiManagerESP32::handleConnectWiFi()
             response += "<p>Station IP Address: " + WiFi.localIP().toString() + "</p>";
             response += "<p>Access Point still available at: " + WiFi.softAPIP().toString() + "</p>";
             response += "<p>You can access the board at either IP address.</p>";
+            prefs.begin("wifiCreds", false);
+            prefs.putString("ssid", wifiSSID);
+            prefs.putString("pass", wifiPassword);
+            prefs.end();
         }
         else
         {
@@ -1085,15 +1445,15 @@ void WiFiManagerESP32::handleConnectWiFi()
         }
         response += "<p><a href='/' style='color:#ec8703;'>Back to Configuration</a></p>";
         response += "</body></html>";
-        sendResponse(response);
+        sendResponse(request, response);
     }
     else
     {
         String response = "<html><body style='font-family:Arial;background:#5c5d5e;color:#ec8703;text-align:center;padding:50px;'>";
         response += "<h2>Error</h2>";
-        response += "<p>No WiFi SSID provided.</p>";
+        response += "<p>No WiFi SSID or Password provided.</p>";
         response += "<p><a href='/' style='color:#ec8703;'>Back to Configuration</a></p>";
         response += "</body></html>";
-        sendResponse(response);
+        sendResponse(request, response);
     }
 }

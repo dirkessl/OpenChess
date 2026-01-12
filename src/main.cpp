@@ -5,17 +5,12 @@
 #include "chess_bot.h"
 
 // Uncomment the next line to enable WiFi features (requires compatible board)
-#define ENABLE_WIFI // Currently disabled - RP2040 boards use local mode only
+#define ENABLE_WIFI
 #ifdef ENABLE_WIFI
 // Use different WiFi manager based on board type
 #if defined(ESP32) || defined(ESP8266)
 #include "wifi_manager_esp32.h" // Full WiFi implementation for ESP32/ESP8266
 #define WiFiManager WiFiManagerESP32
-#elif defined(ARDUINO_SAMD_MKRWIFI1010) || defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT)
-#include "wifi_manager.h" // Full WiFi implementation for boards with WiFiNINA
-#else
-#include "wifi_manager_rp2040.h" // Placeholder for RP2040 and other boards
-#define WiFiManager WiFiManagerRP2040
 #endif
 #endif
 
@@ -35,15 +30,14 @@ enum GameMode
 
 // Global instances
 BoardDriver boardDriver;
+#ifdef ENABLE_WIFI
+WiFiManager wifiManager(&boardDriver);
+#endif
 ChessEngine chessEngine;
 ChessMoves chessMoves(&boardDriver, &chessEngine);
 SensorTest sensorTest(&boardDriver);
-ChessBot chessBot(&boardDriver, &chessEngine, BOT_MEDIUM, true);   // Mode 2: Player White, AI Black, Medium
-ChessBot chessBot3(&boardDriver, &chessEngine, BOT_MEDIUM, false); // Mode 3: Player Black, AI White, Hard
-
-#ifdef ENABLE_WIFI
-WiFiManager wifiManager;
-#endif
+ChessBot chessBot(&boardDriver, &chessEngine, &wifiManager, BOT_MEDIUM, true);   // Mode 2: Player White, AI Black, Medium
+ChessBot chessBot3(&boardDriver, &chessEngine, &wifiManager, BOT_MEDIUM, false); // Mode 3: Player Black, AI White, Medium
 
 // Current game state
 GameMode currentMode = MODE_SELECTION;
@@ -177,9 +171,6 @@ void loop()
   }
 
 #ifdef ENABLE_WIFI
-  // Handle WiFi clients
-  wifiManager.handleClient();
-
   // Check for pending board edits from WiFi
   char editBoard[8][8];
   if (wifiManager.getPendingBoardEdit(editBoard))

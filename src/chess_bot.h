@@ -5,6 +5,7 @@
 #include "chess_engine.h"
 #include "stockfish_settings.h"
 #include "arduino_secrets.h"
+#include "wifi_manager_esp32.h"
 
 // Platform-specific WiFi includes
 #if defined(ESP32) || defined(ESP8266)
@@ -12,10 +13,6 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #define WiFiSSLClient WiFiClientSecure
-#elif defined(ARDUINO_SAMD_MKRWIFI1010) || defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT)
-// Boards with WiFiNINA module
-#include <WiFiNINA.h>
-#include <WiFiSSLClient.h>
 #else
 // Other boards - WiFi not supported
 #warning "WiFi not supported on this board - Chess Bot will not work"
@@ -26,6 +23,7 @@ class ChessBot
 private:
   BoardDriver *_boardDriver;
   ChessEngine *_chessEngine;
+  WiFiManagerESP32 *_wifiManager;
 
   char board[8][8];
   const char INITIAL_BOARD[8][8] = {
@@ -71,14 +69,13 @@ private:
   void processPlayerMove(int fromRow, int fromCol, int toRow, int toCol, char piece);
   void makeBotMove();
   void showBotThinking();
-  void showConnectionStatus();
   void showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toCol);
   void waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int toCol);
   void confirmSquareCompletion(int row, int col);
   void printCurrentBoard();
 
 public:
-  ChessBot(BoardDriver *boardDriver, ChessEngine *chessEngine, BotDifficulty diff = BOT_MEDIUM, bool playerWhite = true);
+  ChessBot(BoardDriver *boardDriver, ChessEngine *chessEngine, WiFiManagerESP32 *_wifiManager, BotDifficulty diff = BOT_MEDIUM, bool playerWhite = true);
   void begin();
   void update();
   void setDifficulty(BotDifficulty diff);

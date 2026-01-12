@@ -7,13 +7,16 @@
 
 // Include Arduino.h first to set up ESP32 environment
 #include <Arduino.h>
+#include <Preferences.h>
 
 // ESP32 uses built-in WiFi library from the core
 // Note: If you get WiFiNINA errors, ensure:
 // 1. You're compiling for ESP32 board (Tools -> Board -> ESP32)
 // 2. WiFiNINA library is not interfering (you may need to temporarily remove it)
 #include <WiFi.h>
-#include <WebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include "board_driver.h"
 
 // ---------------------------
 // WiFi Configuration
@@ -28,18 +31,18 @@
 class WiFiManagerESP32
 {
 private:
-    WebServer server;
+    AsyncWebServer server;
     bool apMode;
     bool clientConnected;
 
     // Configuration variables
+    Preferences prefs;
     String wifiSSID;
     String wifiPassword;
-    String lichessToken;
     String gameMode;
-    String startupType;
 
     // Board state storage
+    BoardDriver *_boardDriver;
     char boardState[8][8];
     bool boardStateValid;
     float boardEvaluation; // Stockfish evaluation (in centipawns)
@@ -49,7 +52,6 @@ private:
     bool hasPendingEdit;
 
     // WiFi connection methods
-    bool connectToWiFi(String ssid, String password);
     bool startAccessPoint();
     IPAddress getIPAddress();
     bool isConnectedToWiFi();
@@ -59,31 +61,28 @@ private:
     String generateGameSelectionPage();
     String generateBoardViewPage();
     String generateBoardEditPage();
-    String generateBoardJSON();
     String getPieceSymbol(char piece);
-    void handleRoot();
-    void handleGameSelection();
-    void handleConfigSubmit();
-    void handleBoard();
-    void handleBoardView();
-    void handleBoardEdit();
-    void handleConnectWiFi();
-    void sendResponse(String content, String contentType = "text/html");
+    void handleRoot(AsyncWebServerRequest *request);
+    void handleGameSelection(AsyncWebServerRequest *request);
+    void handleConfigSubmit(AsyncWebServerRequest *request);
+    void handleBoard(AsyncWebServerRequest *request);
+    void handleBoardView(AsyncWebServerRequest *request);
+    void handleBoardEdit(AsyncWebServerRequest *request);
+    void handleConnectWiFi(AsyncWebServerRequest *request);
+    void sendResponse(AsyncWebServerRequest *request, String content, String contentType = "text/html");
     void parseFormData(String data);
-    void parseBoardEditData();
+    void parseBoardEditData(AsyncWebServerRequest *request);
 
 public:
-    WiFiManagerESP32();
+    WiFiManagerESP32(BoardDriver *boardDriver);
     void begin();
-    void handleClient();
     bool isClientConnected();
+    bool connectToWiFi(String ssid, String password);
 
     // Configuration getters
     String getWiFiSSID() { return wifiSSID; }
     String getWiFiPassword() { return wifiPassword; }
-    String getLichessToken() { return lichessToken; }
     String getGameMode() { return gameMode; }
-    String getStartupType() { return startupType; }
 
     // Game selection via web
     int getSelectedGameMode();
