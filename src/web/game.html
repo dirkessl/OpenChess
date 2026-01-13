@@ -1,0 +1,61 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameMode Selection</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <h2>GameMode Selection</h2>
+        <div class="game-grid">
+            <div class="game-mode available mode-1" onclick="selectGame(1)">
+                <h3>Chess Moves</h3>
+                <p>Human vs Human</p>
+                <p>Visualize available moves</p>
+            </div>
+            <div class="game-mode available mode-2" onclick="selectGame(2)">
+                <h3>Black Bot</h3>
+                <p>Human vs Black Bot</p>
+                <p>(Stockfish Medium)</p>
+            </div>
+            <div class="game-mode available mode-3" onclick="selectGame(3)">
+                <h3>White Bot</h3>
+                <p>Human vs White Bot</p>
+                <p>(Stockfish Medium)</p>
+            </div>
+            <div class="game-mode available mode-4" onclick="selectGame(4)">
+                <h3>Sensor Test</h3>
+                <p>Test board sensors</p>
+            </div>
+        </div>
+        <a href="/board-view" class="button">View Board</a>
+        <a href="/" class="back-button">OpenChess Home</a>
+    </div>
+    <script>
+        function selectGame(mode) {
+            if (mode === 1 || mode === 2 || mode === 3 || mode === 4) {
+                fetch('/gameselect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'gamemode=' + mode
+                }).then(response => response.text()).then(data => {
+                    if (mode != 4)
+                        window.location.href = "/board-view";
+                }
+                ).catch(error => {
+                    console.error('Error:', error);
+                }
+                );
+            } else {
+                alert('This game mode doesn\'t exist!');
+            }
+        }
+    </script>
+</body>
+
+</html>

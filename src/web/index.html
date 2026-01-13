@@ -1,0 +1,87 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenChess Home</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <h2>OpenChess Home</h2>
+        <div class="status" id="status">Loading status...</div>
+        <form id="wifiForm">
+            <div class="form-group">
+                <label for="ssid">WiFi SSID:</label>
+                <input type="text" name="ssid" id="ssid" value="" placeholder="Enter Your WiFi SSID">
+            </div>
+            <div class="form-group">
+                <label for="password">WiFi Password:</label>
+                <input type="text" name="password" id="password" value="" placeholder="Enter Your WiFi Password">
+            </div>
+            <input type="submit" style="background-color: #4CAF50;" value="Connect to WiFi">
+        </form>
+        <a href="/game" class="button">GameMode Selection</a>
+        <a href="/board-view" class="button">View Board</a>
+    </div>
+    <script>
+        function updateWiFiInfo(retries = 0, maxRetries = 20) {
+            fetch('/wifi-info')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('ssid').value = data.ssid;
+                    document.getElementById('password').value = data.password;
+                    const isConnected = (data.connected || '').toString() === 'true';
+                    const statusText = `SSID: ${data.ap_ssid} (${data.ap_ip})` + (isConnected ? ` | SSID: ${data.ssid} (${data.local_ip})` : ``);
+                    document.getElementById('status').textContent = statusText;
+                })
+                .catch(() => {
+                    if (retries < maxRetries) {
+                        const delayMs = Math.min(500 + (retries * 300), 5000);
+                        setTimeout(() => updateWiFiInfo(retries + 1, maxRetries), delayMs);
+                    } else {
+                        alert('Error fetching WiFi information. Please try again later.');
+                    }
+                });
+        }
+
+        // Fetch WiFi information on page load
+        updateWiFiInfo();
+
+        // Handle form submission
+        document.getElementById('wifiForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const ssid = document.getElementById('ssid').value;
+            const password = document.getElementById('password').value;
+
+            document.getElementById('status').textContent = 'Connecting...';
+
+            const formData = new URLSearchParams();
+            formData.append('ssid', ssid);
+            formData.append('password', password);
+
+            fetch('/connect-wifi', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData
+            })
+                .then(response => response.text())
+                .then(data => {
+                    if (data === 'OK')
+                        setTimeout(() => updateWiFiInfo(0, 20), 1000);
+                    else
+                        alert('Bad credentials or already connected to this WiFi.');
+
+                })
+                .catch(() => {
+                    document.getElementById('status').textContent = 'Connecting... (retrying)';
+                    setTimeout(() => updateWiFiInfo(0, 20), 1000);
+                });
+        });
+    </script>
+</body>
+
+</html>

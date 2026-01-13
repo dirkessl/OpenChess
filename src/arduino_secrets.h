@@ -1,7 +1,7 @@
 #ifndef ARDUINO_SECRETS_H
 #define ARDUINO_SECRETS_H
 
-// WiFi Network Credentials
+// WiFi Network Credentials (can also be set via web interface)
 #define SECRET_SSID "YOUR_SSID"
 #define SECRET_PASS "YOUR_PASSWORD"
 

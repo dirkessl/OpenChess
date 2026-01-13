@@ -172,9 +172,7 @@ void ChessBot::update()
                         if (piece != ' ')
                         {
                             // Player should only be able to move their own pieces
-                            bool isPlayerPiece = (playerIsWhite && piece >= 'A' && piece <= 'Z') ||
-                                                 (!playerIsWhite && piece >= 'a' && piece <= 'z');
-                            if (isPlayerPiece)
+                            if ((playerIsWhite && piece >= 'A' && piece <= 'Z') || (!playerIsWhite && piece >= 'a' && piece <= 'z'))
                             {
                                 selectedRow = row;
                                 selectedCol = col;

@@ -21,7 +21,7 @@
 // ---------------------------
 // WiFi Configuration
 // ---------------------------
-#define AP_SSID "OpenChessBoard"
+#define AP_SSID "OpenChess"
 #define AP_PASSWORD "chess123"
 #define AP_PORT 80
 
@@ -52,18 +52,11 @@ private:
     bool hasPendingEdit;
 
     // Web interface methods
-    String indexHTML();
-    String stylesCSS();
-    String gameModeSelectHTML();
-    String boardUpdateJSON();
-    String boardViewHTML();
-    String boardEditHTML();
+    String getWiFiInfoJSON();
+    String getBoardUpdateJSON();
     void handleBoardEditSuccess(AsyncWebServerRequest *request);
     void handleConnectWiFi(AsyncWebServerRequest *request);
-    void handleConfigSubmit(AsyncWebServerRequest *request);
     void handleGameSelection(AsyncWebServerRequest *request);
-
-    String getPieceSymbol(char piece);
 
 public:
     WiFiManagerESP32(BoardDriver *boardDriver);
@@ -76,7 +69,6 @@ public:
     int getSelectedGameMode() { return gameMode.toInt(); }
     void resetGameSelection() { gameMode = "0"; };
     // Board state management
-    void updateBoardState(char newBoardState[8][8]);
     void updateBoardState(char newBoardState[8][8], float evaluation = 0.0f);
     bool hasValidBoardState() { return boardStateValid; }
     float getEvaluation() { return boardEvaluation; }
@@ -84,7 +76,7 @@ public:
     bool getPendingBoardEdit(char editBoard[8][8]);
     void clearPendingEdit();
     // WiFi connection management
-    bool connectToWiFi(String ssid, String password);
+    bool connectToWiFi(String ssid, String password, bool fromWeb = false);
     bool isClientConnected();
 };
 
