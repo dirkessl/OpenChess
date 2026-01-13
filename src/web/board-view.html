@@ -79,9 +79,9 @@
                     }
                     if (data.evaluation !== undefined) {
                         const evalValue = data.evaluation;
-                        const evalInPawns = (evalValue / 100).toFixed(2);
-                        const maxEval = 1000;
+                        const evalInPawns = evalValue.toFixed(2);
                         // Maximum evaluation to display (10 pawns)
+                        const maxEval = 10;
                         const clampedEval = Math.max(-maxEval, Math.min(maxEval, evalValue));
                         const percentage = Math.abs(clampedEval) / maxEval * 50;
                         // Max 50% on each side

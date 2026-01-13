@@ -67,7 +67,6 @@ class BoardDriver {
   // Setup Functions
   bool checkInitialBoard(const char initialBoard[8][8]);
   void updateSetupDisplay(const char initialBoard[8][8]);
-  void printBoardState(const char initialBoard[8][8]);
 };
 
 #endif // BOARD_DRIVER_H

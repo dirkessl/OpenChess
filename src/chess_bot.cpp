@@ -1,4 +1,6 @@
 #include "chess_bot.h"
+#include "chess_utils.h"
+#include "stockfish_api.h"
 #include "wifi_manager_esp32.h"
 #include <Arduino.h>
 
@@ -37,10 +39,8 @@ ChessBot::ChessBot(BoardDriver* boardDriver, ChessEngine* chessEngine, WiFiManag
 
 void ChessBot::begin() {
   Serial.println("=== Starting Chess Bot Mode ===");
-  Serial.print("Player plays: ");
-  Serial.println(playerIsWhite ? "White" : "Black");
-  Serial.print("Bot plays: ");
-  Serial.println(playerIsWhite ? "Black" : "White");
+  Serial.printf("Player plays: %s\n", playerIsWhite ? "White" : "Black");
+  Serial.printf("Bot plays: %s\n", playerIsWhite ? "Black" : "White");
   Serial.print("Bot Difficulty: ");
 
   switch (difficulty) {
@@ -130,8 +130,7 @@ void ChessBot::update() {
   if (isPlayerTurn) {
     static unsigned long lastTurnDebug = 0;
     if (millis() - lastTurnDebug > 5000) {
-      Serial.print("Your turn! Move a ");
-      Serial.println(playerIsWhite ? "WHITE piece (uppercase letters)" : "BLACK piece (lowercase letters)");
+      Serial.printf("Your turn! Move a %s\n", playerIsWhite ? "WHITE piece (uppercase letters)" : "BLACK piece (lowercase letters)");
       lastTurnDebug = millis();
     }
     // Look for piece pickups and placements
@@ -153,18 +152,7 @@ void ChessBot::update() {
                 selectedCol = col;
                 piecePickedUp = true;
 
-                Serial.print("Player picked up ");
-                Serial.print(playerIsWhite ? "WHITE" : "BLACK");
-                Serial.print(" piece '");
-                Serial.print(board[row][col]);
-                Serial.print("' at ");
-                Serial.print((char)('a' + col));
-                Serial.print(8 - row);
-                Serial.print(" (array position ");
-                Serial.print(row);
-                Serial.print(",");
-                Serial.print(col);
-                Serial.println(")");
+                Serial.printf("Player picked up %s piece '%c' at %c%d (array position %d,%d)\n", playerIsWhite ? "WHITE" : "BLACK", board[row][col], (char)('a' + col), 8 - row, row, col);
 
                 // Show selected square
                 _boardDriver->setSquareLED(row, col, 255, 0, 0); // Red
@@ -181,16 +169,7 @@ void ChessBot::update() {
                 break;
               } else {
                 // Player tried to pick up the wrong color piece
-                Serial.print("ERROR: You tried to pick up ");
-                Serial.print((piece >= 'A' && piece <= 'Z') ? "WHITE" : "BLACK");
-                Serial.print(" piece '");
-                Serial.print(piece);
-                Serial.print("' at ");
-                Serial.print((char)('a' + col));
-                Serial.print(8 - row);
-                Serial.print(". You can only move ");
-                Serial.print(playerIsWhite ? "WHITE" : "BLACK");
-                Serial.println(" pieces!");
+                Serial.printf("ERROR: You tried to pick up %s piece '%c' at %c%d. You can only move %s pieces!\n", (piece >= 'A' && piece <= 'Z') ? "WHITE" : "BLACK", piece, (char)('a' + col), 8 - row, playerIsWhite ? "WHITE" : "BLACK");
 
                 // Flash red to indicate error
                 _boardDriver->blinkSquare(row, col, 255, 0, 0); // Blink red
@@ -301,44 +280,23 @@ void ChessBot::update() {
 
 String ChessBot::makeStockfishRequest(String fen) {
   WiFiSSLClient client;
-
 #if defined(ESP32) || defined(ESP8266)
   // ESP32/ESP8266: Set insecure mode for SSL (or add proper certificate validation)
-  // For production, you should validate certificates properly
   client.setInsecure();
 #endif
-
-  Serial.println("Making API request to Stockfish...");
-  Serial.print("FEN: ");
-  Serial.println(fen);
-
+  String path = StockfishAPI::buildRequestURL(fen, settings.depth);
   // Retry logic
   for (int attempt = 1; attempt <= settings.maxRetries; attempt++) {
-    Serial.print("Attempt ");
-    Serial.print(attempt);
-    Serial.print("/");
-    Serial.println(settings.maxRetries);
-
+    Serial.println("Attempt: " + String(attempt) + "/" + String(settings.maxRetries));
     if (client.connect(STOCKFISH_API_URL, STOCKFISH_API_PORT)) {
-      // URL encode the FEN string
-      String encodedFen = urlEncode(fen);
-
-      // Make HTTP GET request
-      String url = String(STOCKFISH_API_PATH) + "?fen=" + encodedFen + "&depth=" + String(settings.depth);
-
-      Serial.print("Request URL: ");
-      Serial.println(url);
-
-      client.println("GET " + url + " HTTP/1.1");
-      client.println("Host: " + String(STOCKFISH_API_URL));
+      client.println("GET " + path + " HTTP/1.1");
+      client.println("Host: " STOCKFISH_API_URL);
       client.println("Connection: close");
       client.println();
-
       // Wait for response
       unsigned long startTime = millis();
       String response = "";
       bool gotResponse = false;
-
       while (client.connected() && (millis() - startTime < settings.timeoutMs)) {
         if (client.available()) {
           response = client.readString();
@@ -347,33 +305,16 @@ String ChessBot::makeStockfishRequest(String fen) {
         }
         delay(10);
       }
-
       client.stop();
 
-      if (gotResponse && response.length() > 0) {
-        // Debug: Print raw response (truncated if too long)
-        Serial.println("=== RAW API RESPONSE ===");
-        if (response.length() > 500) {
-          Serial.println(response.substring(0, 500) + "... (truncated)");
-        } else {
-          Serial.println(response);
-        }
-        Serial.println("=== END RAW RESPONSE ===");
-
+      if (gotResponse && response.length() > 0)
         return response;
-      } else {
-        Serial.println("API request timeout or empty response");
-        if (attempt < settings.maxRetries) {
-          Serial.println("Retrying...");
-          delay(1000); // Wait before retry
-        }
-      }
-    } else {
-      Serial.println("Failed to connect to Stockfish API");
-      if (attempt < settings.maxRetries) {
-        Serial.println("Retrying...");
-        delay(1000); // Wait before retry
-      }
+    }
+
+    Serial.println("API request timeout or empty response");
+    if (attempt < settings.maxRetries) {
+      Serial.println("Retrying...");
+      delay(500);
     }
   }
 
@@ -382,404 +323,63 @@ String ChessBot::makeStockfishRequest(String fen) {
 }
 
 bool ChessBot::parseStockfishResponse(String response, String& bestMove, float& evaluation) {
-  // Initialize evaluation to 0 (neutral)
-  evaluation = 0.0;
-
-  // Find JSON content
-  int jsonStart = response.indexOf("{");
-  if (jsonStart == -1) {
-    Serial.println("No JSON found in response");
-    Serial.println("Response was: " + response);
+  StockfishResponse stockfishResp;
+  if (!StockfishAPI::parseResponse(response, stockfishResp)) {
+    Serial.printf("Failed to parse Stockfish response: %s\n", stockfishResp.errorMessage.c_str());
     return false;
   }
-
-  String json = response.substring(jsonStart);
-  Serial.print("Extracted JSON: ");
-  Serial.println(json);
-
-  // Check if request was successful (some APIs use "success":true, others just return the move)
-  bool hasSuccess = json.indexOf("\"success\"") >= 0;
-  if (hasSuccess && json.indexOf("\"success\":true") == -1) {
-    Serial.println("API request was not successful");
-    return false;
-  }
-
-  // Parse evaluation - try different possible field names
-  // Format 1: "evaluation": 0.5 (in pawns)
-  // Format 2: "evaluation": 50 (in centipawns)
-  // Format 3: "score": 0.5
-  // Format 4: "cp": 50 (centipawns)
-  int evalStart = json.indexOf("\"evaluation\":");
-  if (evalStart == -1) {
-    evalStart = json.indexOf("\"score\":");
-    if (evalStart == -1) {
-      evalStart = json.indexOf("\"cp\":");
-      if (evalStart >= 0) {
-        evalStart += 5; // Skip "cp":
-      }
-    } else {
-      evalStart += 8; // Skip "score":
-    }
+  bestMove = stockfishResp.bestMove;
+  if (stockfishResp.hasMate) {
+    Serial.printf("Mate in %d moves\n", stockfishResp.mateInMoves);
+    // Convert mate to a large evaluation (positive or negative based on direction)
+    evaluation = stockfishResp.mateInMoves > 0 ? 100.0f : -100.0f;
   } else {
-    evalStart += 14; // Skip "evaluation":
+    // Regular evaluation (already in pawns from API)
+    evaluation = stockfishResp.evaluation;
   }
-
-  if (evalStart >= 0) {
-    // Find the number value
-    String evalStr = json.substring(evalStart);
-    evalStr.trim();
-    // Remove any leading whitespace or quotes
-    while (evalStr.length() > 0 && (evalStr[0] == ' ' || evalStr[0] == '"' || evalStr[0] == '\'')) {
-      evalStr = evalStr.substring(1);
-    }
-    // Find the end of the number (comma, }, or whitespace)
-    int evalEnd = evalStr.length();
-    for (int i = 0; i < evalStr.length(); i++) {
-      char c = evalStr[i];
-      if (c == ',' || c == '}' || c == ' ' || c == '\n' || c == '\r') {
-        evalEnd = i;
-        break;
-      }
-    }
-    evalStr = evalStr.substring(0, evalEnd);
-    evalStr.trim();
-
-    if (evalStr.length() > 0) {
-      evaluation = evalStr.toFloat();
-      // If evaluation is small (< 10), assume it's in pawns, convert to centipawns
-      // If evaluation is large (> 10), assume it's already in centipawns
-      if (evaluation > -10 && evaluation < 10) {
-        evaluation = evaluation * 100.0; // Convert pawns to centipawns
-      }
-      Serial.print("Parsed evaluation: ");
-      Serial.print(evaluation);
-      Serial.println(" centipawns");
-    }
-  } else {
-    Serial.println("No evaluation field found in response");
-  }
-
-  // Parse bestmove field - try different possible formats
-  // Format 1: "bestmove":"e2e4"
-  // Format 2: "bestmove":"bestmove e2e4 ponder e7e5"
-  // Format 3: {"move":"e2e4"}
-
-  int bestmoveStart = json.indexOf("\"bestmove\":\"");
-  if (bestmoveStart == -1) {
-    // Try alternative format with just "move"
-    bestmoveStart = json.indexOf("\"move\":\"");
-    if (bestmoveStart == -1) {
-      Serial.println("No bestmove or move field found in response");
-      return false;
-    }
-    bestmoveStart += 8; // Skip "move":"
-  } else {
-    bestmoveStart += 12; // Skip "bestmove":"
-  }
-
-  int bestmoveEnd = json.indexOf("\"", bestmoveStart);
-  if (bestmoveEnd == -1) {
-    Serial.println("Invalid bestmove format - no closing quote");
-    return false;
-  }
-
-  String fullMove = json.substring(bestmoveStart, bestmoveEnd);
-  Serial.print("Full move string: ");
-  Serial.println(fullMove);
-
-  // Check if the move string contains "bestmove " prefix (some APIs include it)
-  int moveStart = fullMove.indexOf("bestmove ");
-  if (moveStart >= 0) {
-    moveStart += 9; // Skip "bestmove "
-    int moveEnd = fullMove.indexOf(" ", moveStart);
-    if (moveEnd == -1) {
-      // No ponder part, take rest of string
-      bestMove = fullMove.substring(moveStart);
-    } else {
-      bestMove = fullMove.substring(moveStart, moveEnd);
-    }
-  } else {
-    // Move is directly in the field value
-    bestMove = fullMove;
-  }
-
-  // Clean up the move - remove any whitespace
-  bestMove.trim();
-
-  Serial.print("Parsed move: ");
-  Serial.println(bestMove);
-
-  // Validate move format (should be 4-5 characters like "e2e4" or "e7e8q")
-  if (bestMove.length() < 4 || bestMove.length() > 5) {
-    Serial.print("Invalid move length: ");
-    Serial.println(bestMove.length());
-    return false;
-  }
-
   return true;
 }
 
 void ChessBot::makeBotMove() {
   Serial.println("=== BOT MOVE CALCULATION ===");
-  Serial.print("Bot is playing as: ");
-  Serial.println(isWhiteTurn ? "White" : "Black");
-
-  // Show thinking animation
+  Serial.println("Bot is playing as: " + String(isWhiteTurn ? "White" : "Black"));
   showBotThinking();
-
-  String fen = boardToFEN();
-  Serial.print("Sending FEN to Stockfish: ");
-  Serial.println(fen);
-
+  String fen = ChessUtils::boardToFEN(board, isWhiteTurn);
+  Serial.println("Sending FEN to Stockfish: " + fen);
+  botThinking = false;
+  String bestMove;
   String response = makeStockfishRequest(fen);
+  if (parseStockfishResponse(response, bestMove, currentEvaluation)) {
+    Serial.println("=== STOCKFISH EVALUATION ===");
+    Serial.printf("%s advantage: %.2f pawns\n", currentEvaluation > 0 ? "White" : "Black", currentEvaluation);
 
-  if (response.length() > 0) {
-    String bestMove;
-    float evaluation = 0.0;
-    if (parseStockfishResponse(response, bestMove, evaluation)) {
-      // Store and print evaluation
-      currentEvaluation = evaluation;
-      Serial.print("=== STOCKFISH EVALUATION ===");
-      Serial.println();
-      if (evaluation > 0) {
-        Serial.print("White advantage: +");
-        Serial.print(evaluation / 100.0, 2);
-        Serial.println(" pawns");
-      } else if (evaluation < 0) {
-        Serial.print("Black advantage: ");
-        Serial.print(evaluation / 100.0, 2);
-        Serial.println(" pawns");
-      } else {
-        Serial.println("Position is equal (0.00 pawns)");
+    int fromRow, fromCol, toRow, toCol;
+    String validationError;
+    if (StockfishAPI::validateUCIMove(bestMove, validationError, fromRow, fromCol, toRow, toCol)) {
+      Serial.printf("Move string: %s Parsed: %c%c -> %c%c | Array coords: (%d,%d) to (%d,%d)", bestMove.c_str(), bestMove[0], bestMove[1], bestMove[2], bestMove[3], fromRow, fromCol, toRow, toCol);
+      if (bestMove.length() >= 5)
+        Serial.printf(" Promotion to: %c", bestMove[4]);
+      Serial.println("\n============================");
+      // Verify the move is from the correct color piece
+      char piece = board[fromRow][fromCol];
+      bool botPlaysWhite = !playerIsWhite;
+      bool isBotPiece = (botPlaysWhite && piece >= 'A' && piece <= 'Z') || (!botPlaysWhite && piece >= 'a' && piece <= 'z');
+      if (!isBotPiece) {
+        Serial.printf("ERROR: Bot tried to move a %s piece, but bot plays %s. Piece at source: %c\n", (piece >= 'A' && piece <= 'Z') ? "WHITE" : "BLACK", botPlaysWhite ? "WHITE" : "BLACK", piece);
+        return;
       }
-      Serial.print("Evaluation in centipawns: ");
-      Serial.println(evaluation);
-      Serial.println("============================");
-
-      int fromRow, fromCol, toRow, toCol;
-      if (parseMove(bestMove, fromRow, fromCol, toRow, toCol)) {
-        Serial.print("Bot calculated move: ");
-        Serial.println(bestMove);
-
-        // Verify the move is from the correct color piece
-        // Bot plays White if player is Black, Bot plays Black if player is White
-        char piece = board[fromRow][fromCol];
-        bool botPlaysWhite = !playerIsWhite;
-        bool isBotPiece = (botPlaysWhite && piece >= 'A' && piece <= 'Z') ||
-                          (!botPlaysWhite && piece >= 'a' && piece <= 'z');
-
-        if (!isBotPiece) {
-          Serial.print("ERROR: Bot tried to move a ");
-          Serial.print((piece >= 'A' && piece <= 'Z') ? "WHITE" : "BLACK");
-          Serial.print(" piece, but bot plays ");
-          Serial.println(botPlaysWhite ? "WHITE" : "BLACK");
-          Serial.print("Piece at source: ");
-          Serial.println(piece);
-          botThinking = false;
-          return;
-        }
-
-        if (piece == ' ') {
-          Serial.println("ERROR: Bot tried to move from an empty square!");
-          botThinking = false;
-          return;
-        }
-
-        executeBotMove(fromRow, fromCol, toRow, toCol);
-
-        // Switch back to player's turn
-        // If player is White, isWhiteTurn = true; if player is Black, isWhiteTurn = false
-        isWhiteTurn = playerIsWhite;
-        botThinking = false;
-
-        Serial.println("Bot move completed. Your turn!");
-      } else {
-        Serial.print("Failed to parse bot move: ");
-        Serial.println(bestMove);
-        botThinking = false;
+      if (piece == ' ') {
+        Serial.println("ERROR: Bot tried to move from an empty square!");
+        return;
       }
+      // Execute the validated bot move
+      executeBotMove(fromRow, fromCol, toRow, toCol);
+      isWhiteTurn = playerIsWhite;
+      Serial.println("Bot move completed. Your turn!");
     } else {
-      Serial.println("Failed to parse Stockfish response");
-      Serial.print("Response was: ");
-      if (response.length() > 200) {
-        Serial.println(response.substring(0, 200) + "... (truncated)");
-      } else {
-        Serial.println(response);
-      }
-      botThinking = false;
-    }
-  } else {
-    Serial.println("No response from Stockfish API after all retries");
-    botThinking = false;
-  }
-}
-
-String ChessBot::boardToFEN() {
-  String fen = "";
-
-  // Board position - FEN expects rank 8 (black pieces) first, rank 1 (white pieces) last
-  // Our array: row 0 = rank 1 (white pieces at bottom), row 7 = rank 8 (black pieces at top)
-  // So we need to reverse the order: start from row 7 and go to row 0
-  for (int row = 7; row >= 0; row--) {
-    int emptyCount = 0;
-    for (int col = 0; col < 8; col++) {
-      if (board[row][col] == ' ') {
-        emptyCount++;
-      } else {
-        if (emptyCount > 0) {
-          fen += String(emptyCount);
-          emptyCount = 0;
-        }
-        fen += board[row][col];
-      }
-    }
-    if (emptyCount > 0) {
-      fen += String(emptyCount);
-    }
-    if (row > 0)
-      fen += "/";
-  }
-
-  // Active color - when we call this for bot's move, isWhiteTurn is false (bot is Black)
-  // So we correctly indicate it's Black's turn
-  fen += isWhiteTurn ? " w" : " b";
-
-  // Castling availability (simplified - assume all available initially)
-  fen += " KQkq";
-
-  // En passant target square (simplified - assume none)
-  fen += " -";
-
-  // Halfmove clock (simplified)
-  fen += " 0";
-
-  // Fullmove number (simplified)
-  fen += " 1";
-
-  Serial.print("Generated FEN: ");
-  Serial.println(fen);
-  Serial.print("Active color: ");
-  Serial.println(isWhiteTurn ? "White" : "Black");
-
-  return fen;
-}
-
-void ChessBot::fenToBoard(String fen) {
-  // Parse FEN string and update board state
-  // FEN format: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-  // We only parse the board part (first part before space)
-
-  int spacePos = fen.indexOf(' ');
-  if (spacePos > 0) {
-    fen = fen.substring(0, spacePos);
-  }
-
-  // Clear board
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
-      board[row][col] = ' ';
+      Serial.printf("Failed to parse bot move - %s\n", validationError.c_str());
     }
   }
-
-  // Parse FEN ranks (rank 8 first, rank 1 last)
-  // FEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-  // Our array: row 0 = rank 1, row 7 = rank 8
-  int rank = 7; // Start with rank 8 (row 7 in our array)
-  int col = 0;
-
-  for (int i = 0; i < fen.length() && rank >= 0; i++) {
-    char c = fen.charAt(i);
-
-    if (c == '/') {
-      // Next rank
-      rank--;
-      col = 0;
-    } else if (c >= '1' && c <= '8') {
-      // Empty squares
-      int emptyCount = c - '0';
-      col += emptyCount;
-    } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
-      // Piece
-      if (rank >= 0 && rank < 8 && col >= 0 && col < 8) {
-        board[rank][col] = c;
-        col++;
-      }
-    }
-  }
-
-  Serial.println("Board updated from FEN");
-  printCurrentBoard();
-}
-
-bool ChessBot::parseMove(String move, int& fromRow, int& fromCol, int& toRow, int& toCol) {
-  if (move.length() < 4) {
-    Serial.print("Move too short: ");
-    Serial.println(move);
-    return false;
-  }
-
-  // Parse chess notation (e.g., "e2e4")
-  // File (column): a-h -> 0-7
-  // Rank (row): 1-8 -> In our array: rank 1 = row 0, rank 8 = row 7
-  // So rank 1 -> row 0, rank 2 -> row 1, ..., rank 8 -> row 7
-
-  char fromFile = move.charAt(0);
-  char fromRank = move.charAt(1);
-  char toFile = move.charAt(2);
-  char toRank = move.charAt(3);
-
-  // Validate file characters
-  if (fromFile < 'a' || fromFile > 'h' || toFile < 'a' || toFile > 'h') {
-    Serial.println("Invalid file in move");
-    return false;
-  }
-
-  // Validate rank characters
-  if (fromRank < '1' || fromRank > '8' || toRank < '1' || toRank > '8') {
-    Serial.println("Invalid rank in move");
-    return false;
-  }
-
-  fromCol = fromFile - 'a';
-  fromRow = (fromRank - '0') - 1; // Convert 1-8 to 0-7 (rank 1 = row 0)
-  toCol = toFile - 'a';
-  toRow = (toRank - '0') - 1; // Convert 1-8 to 0-7
-
-  // Debug coordinate conversion
-  Serial.print("Move string: ");
-  Serial.println(move);
-  Serial.print("Parsed: ");
-  Serial.print(fromFile);
-  Serial.print(fromRank);
-  Serial.print(" -> ");
-  Serial.print(toFile);
-  Serial.print(toRank);
-  Serial.print(" | Array coords: (");
-  Serial.print(fromRow);
-  Serial.print(",");
-  Serial.print(fromCol);
-  Serial.print(") to (");
-  Serial.print(toRow);
-  Serial.print(",");
-  Serial.print(toCol);
-  Serial.println(")");
-
-  // Check for promotion
-  if (move.length() >= 5) {
-    char promotionPiece = move.charAt(4);
-    Serial.print("Promotion to: ");
-    Serial.println(promotionPiece);
-  }
-
-  // Validate coordinates
-  bool valid = (fromRow >= 0 && fromRow < 8 && fromCol >= 0 && fromCol < 8 &&
-                toRow >= 0 && toRow < 8 && toCol >= 0 && toCol < 8);
-
-  if (!valid) {
-    Serial.println("Invalid coordinates after parsing");
-  }
-
-  return valid;
 }
 
 void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
@@ -790,13 +390,7 @@ void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
   board[toRow][toCol] = piece;
   board[fromRow][fromCol] = ' ';
 
-  Serial.print("Bot wants to move piece from ");
-  Serial.print((char)('a' + fromCol));
-  Serial.print(8 - fromRow);
-  Serial.print(" to ");
-  Serial.print((char)('a' + toCol));
-  Serial.println(8 - toRow);
-  Serial.println("Please make this move on the physical board...");
+  Serial.printf("Bot wants to move piece from %c%d to %c%d\nPlease make this move on the physical board...\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow);
 
   // Show the move that needs to be made
   showBotMoveIndicator(fromRow, fromCol, toRow, toCol);
@@ -805,8 +399,7 @@ void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
   waitForBotMoveCompletion(fromRow, fromCol, toRow, toCol);
 
   if (capturedPiece != ' ') {
-    Serial.print("Piece captured: ");
-    Serial.println(capturedPiece);
+    Serial.printf("Piece captured: %c\n", capturedPiece);
     _boardDriver->captureAnimation();
   }
 
@@ -849,7 +442,7 @@ void ChessBot::waitForBoardSetup() {
   gameStarted = true;
 
   // Show initial board state
-  printCurrentBoard();
+  ChessUtils::printBoard(board);
 }
 
 void ChessBot::processPlayerMove(int fromRow, int fromCol, int toRow, int toCol, char piece) {
@@ -859,18 +452,10 @@ void ChessBot::processPlayerMove(int fromRow, int fromCol, int toRow, int toCol,
   board[toRow][toCol] = piece;
   board[fromRow][fromCol] = ' ';
 
-  Serial.print("Player moved ");
-  Serial.print(piece);
-  Serial.print(" from ");
-  Serial.print((char)('a' + fromCol));
-  Serial.print(8 - fromRow);
-  Serial.print(" to ");
-  Serial.print((char)('a' + toCol));
-  Serial.println(8 - toRow);
+  Serial.printf("Player moved %c from %c%d to %c%d\n", piece, (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow);
 
   if (capturedPiece != ' ') {
-    Serial.print("Captured ");
-    Serial.println(capturedPiece);
+    Serial.printf("Captured %c\n", capturedPiece);
     _boardDriver->captureAnimation();
   }
 
@@ -878,42 +463,9 @@ void ChessBot::processPlayerMove(int fromRow, int fromCol, int toRow, int toCol,
   if (_chessEngine->isPawnPromotion(piece, toRow)) {
     char promotedPiece = _chessEngine->getPromotedPiece(piece);
     board[toRow][toCol] = promotedPiece;
-    Serial.print("Pawn promoted to ");
-    Serial.println(promotedPiece);
+    Serial.printf("Pawn promoted to %c\n", promotedPiece);
     _boardDriver->promotionAnimation(toCol);
   }
-}
-
-String ChessBot::urlEncode(String str) {
-  String encoded = "";
-  char c;
-  char code0;
-  char code1;
-
-  for (int i = 0; i < str.length(); i++) {
-    c = str.charAt(i);
-    if (c == ' ') {
-      encoded += "%20";
-    } else if (c == '/') {
-      encoded += "%2F";
-    } else if (isalnum(c)) {
-      encoded += c;
-    } else {
-      code1 = (c & 0xf) + '0';
-      if ((c & 0xf) > 9) {
-        code1 = (c & 0xf) - 10 + 'A';
-      }
-      c = (c >> 4) & 0xf;
-      code0 = c + '0';
-      if (c > 9) {
-        code0 = c - 10 + 'A';
-      }
-      encoded += '%';
-      encoded += code0;
-      encoded += code1;
-    }
-  }
-  return encoded;
 }
 
 void ChessBot::showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toCol) {
@@ -980,30 +532,6 @@ void ChessBot::confirmSquareCompletion(int row, int col) {
   _boardDriver->blinkSquare(row, col, 0, 255, 0, 3); // Green flash
 }
 
-void ChessBot::printCurrentBoard() {
-  Serial.println("=== CURRENT BOARD STATE ===");
-  Serial.println("  a b c d e f g h");
-  for (int row = 0; row < 8; row++) {
-    Serial.print(8 - row);
-    Serial.print(" ");
-    for (int col = 0; col < 8; col++) {
-      char piece = board[row][col];
-      if (piece == ' ') {
-        Serial.print(". ");
-      } else {
-        Serial.print(piece);
-        Serial.print(" ");
-      }
-    }
-    Serial.print(" ");
-    Serial.println(8 - row);
-  }
-  Serial.println("  a b c d e f g h");
-  Serial.println("White pieces (uppercase): R N B Q K P");
-  Serial.println("Black pieces (lowercase): r n b q k p");
-  Serial.println("========================");
-}
-
 void ChessBot::setDifficulty(BotDifficulty diff) {
   difficulty = diff;
   switch (difficulty) {
@@ -1055,6 +583,5 @@ void ChessBot::setBoardState(char newBoardState[8][8]) {
   }
   // Update sensor previous state to match new board
   _boardDriver->readSensors();
-  // Note: We might need to update FEN state if bot is active
-  // For now, just update the board state
+  ChessUtils::printBoard(board);
 }

@@ -6,7 +6,7 @@
 // Struct to hold parsed Stockfish API response
 struct StockfishResponse {
   bool success;
-  float evaluation;    // Evaluation in centipawns (or null if mate exists)
+  float evaluation;    // Evaluation in pawns (or null if mate exists)
   int mateInMoves;     // Number of moves until mate (null if no forced mate)
   bool hasMate;        // true if mateInMoves is valid
   String bestMove;     // Best move in UCI format (e.g., "b1c3")
@@ -20,6 +20,11 @@ class StockfishAPI {
   // Parse JSON response from Stockfish API
   // Returns true if parsing was successful
   static bool parseResponse(const String& jsonString, StockfishResponse& response);
+
+  // Validate a UCI move string and convert to array coordinates
+  // Returns true if valid and fills errorMessage when invalid
+  // Also fills fromRow, fromCol, toRow, toCol with array coordinates (0-7)
+  static bool validateUCIMove(const String& move, String& errorMessage, int& fromRow, int& fromCol, int& toRow, int& toCol);
 
   // Build the API request URL
   static String buildRequestURL(const String& fen, int depth);

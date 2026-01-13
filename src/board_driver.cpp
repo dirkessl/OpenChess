@@ -285,11 +285,11 @@ void BoardDriver::updateSetupDisplay(const char initialBoard[8][8]) {
       if (sensorState[row][col]) {
         // Determine color based on where the piece is placed
         if (row <= 1)
-          setSquareLED(row, col, 255, 255, 255); // White side (top, rows 0-1) - White LED
+          setSquareLED(row, col, 0, 0, 255); // Black side
         else if (row >= 6)
-          setSquareLED(row, col, 0, 0, 255); // Black side (bottom, rows 6-7) - Blue LED
+          setSquareLED(row, col, 255, 255, 255); // White side
         else
-          setSquareLED(row, col, 255, 0, 0); // Middle rows (rows 2-5) - Red LED
+          setSquareLED(row, col, 255, 0, 0); // Middle rows
       } else {
         // No piece detected - turn off LED
         setSquareLED(row, col, 0, 0, 0);
@@ -297,24 +297,4 @@ void BoardDriver::updateSetupDisplay(const char initialBoard[8][8]) {
     }
   }
   strip.show();
-}
-
-void BoardDriver::printBoardState(const char initialBoard[8][8]) {
-  Serial.println("Current Board:");
-  for (int row = 0; row < 8; row++) {
-    Serial.print("{ ");
-    for (int col = 0; col < 8; col++) {
-      char displayChar = ' ';
-      if (initialBoard[row][col] != ' ') {
-        displayChar = sensorState[row][col] ? initialBoard[row][col] : '-';
-      }
-      Serial.print("'");
-      Serial.print(displayChar);
-      Serial.print("'");
-      if (col < 7)
-        Serial.print(", ");
-    }
-    Serial.println(" },");
-  }
-  Serial.println();
 }

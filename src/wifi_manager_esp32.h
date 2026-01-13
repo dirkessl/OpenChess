@@ -44,7 +44,7 @@ class WiFiManagerESP32 {
   BoardDriver* _boardDriver;
   char boardState[8][8];
   bool boardStateValid;
-  float boardEvaluation; // Stockfish evaluation (in centipawns)
+  float boardEvaluation; // Stockfish evaluation (in pawns)
 
   // Board edit storage (pending edits from web interface)
   char pendingBoardEdit[8][8];

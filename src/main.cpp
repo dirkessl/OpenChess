@@ -71,8 +71,7 @@ void setup() {
   Serial.println("         OpenChess Starting Up");
   Serial.println("================================================");
   Serial.println("DEBUG: Serial communication established");
-  Serial.print("DEBUG: Millis since boot: ");
-  Serial.println(millis());
+  Serial.printf("DEBUG: Millis since boot: %lu\n", millis());
 
   // Debug board type detection
   Serial.println("DEBUG: Board type detection:");
@@ -158,9 +157,7 @@ void loop() {
 
   // Print periodic status every 10 seconds
   if (millis() - lastDebugPrint > 10000) {
-    Serial.print("DEBUG: Loop running, uptime: ");
-    Serial.print(millis() / 1000);
-    Serial.println(" seconds");
+    Serial.printf("DEBUG: Loop running, uptime: %lu seconds\n", millis() / 1000);
     lastDebugPrint = millis();
   }
 
@@ -216,8 +213,7 @@ void loop() {
   // Check for WiFi game selection
   int selectedMode = wifiManager.getSelectedGameMode();
   if (selectedMode > 0) {
-    Serial.print("DEBUG: WiFi game selection detected: ");
-    Serial.println(selectedMode);
+    Serial.printf("DEBUG: WiFi game selection detected: %d\n", selectedMode);
 
     switch (selectedMode) {
       case 1:
@@ -263,8 +259,7 @@ void loop() {
   } else {
     static bool modeChangeLogged = false;
     if (!modeChangeLogged) {
-      Serial.print("DEBUG: Mode changed to: ");
-      Serial.println(currentMode);
+      Serial.printf("DEBUG: Mode changed to: %d\n", currentMode);
       modeChangeLogged = true;
     }
     if (!modeInitialized) {

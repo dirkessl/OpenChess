@@ -1,32 +1,64 @@
 #include "stockfish_api.h"
+#include "arduino_secrets.h"
 
-bool StockfishAPI::parseResponse(const String& jsonString, StockfishResponse& response) {
+bool StockfishAPI::parseResponse(const String& response, StockfishResponse& stockfishResp) {
+  if (response.length() == 0) {
+    stockfishResp.success = false;
+    stockfishResp.errorMessage = "JSON parsing failed: Empty response";
+    return false;
+  }
+
+  // Separate HTTP headers from body using the blank line (CRLF CRLF)
+  int headerEndPos = response.indexOf("\r\n\r\n");
+  String jsonOnly;
+
+  if (headerEndPos != -1) {
+    // Headers found, extract content after the blank line
+    jsonOnly = response.substring(headerEndPos + 4);
+  } else {
+    // Try Unix line endings (LF LF)
+    headerEndPos = response.indexOf("\n\n");
+    if (headerEndPos != -1) {
+      jsonOnly = response.substring(headerEndPos + 2);
+    } else {
+      // No header separator found, assume entire response is JSON
+      jsonOnly = response;
+    }
+  }
+
+  // Trim whitespace
+  jsonOnly.trim();
+
+  if (jsonOnly.length() == 0) {
+    stockfishResp.success = false;
+    stockfishResp.errorMessage = "JSON parsing failed: No content after headers";
+    return false;
+  }
+
   StaticJsonDocument<256> doc;
-  DeserializationError error = deserializeJson(doc, jsonString);
+  DeserializationError error = deserializeJson(doc, jsonOnly);
 
   if (error) {
-    Serial.print("JSON parsing failed: ");
-    Serial.println(error.f_str());
-    response.success = false;
-    response.errorMessage = "JSON parsing failed";
+    stockfishResp.success = false;
+    stockfishResp.errorMessage = "JSON parsing failed: " + String(error.f_str());
     return false;
   }
 
   // Check if the request was successful
   if (!doc.containsKey("success")) {
-    response.success = false;
-    response.errorMessage = "Missing 'success' field";
+    stockfishResp.success = false;
+    stockfishResp.errorMessage = "Missing 'success' field";
     return false;
   }
 
-  response.success = doc["success"].as<bool>();
+  stockfishResp.success = doc["success"].as<bool>();
 
-  if (!response.success) {
+  if (!stockfishResp.success) {
     // If not successful, try to get error message
-    if (doc.containsKey("data")) {
-      response.errorMessage = doc["data"].as<String>();
+    if (doc.containsKey("error")) {
+      stockfishResp.errorMessage = doc["error"].as<String>();
     } else {
-      response.errorMessage = "Unknown error from API";
+      stockfishResp.errorMessage = "Unknown error from API";
     }
     return false;
   }
@@ -34,27 +66,27 @@ bool StockfishAPI::parseResponse(const String& jsonString, StockfishResponse& re
   // Parse evaluation (can be null)
   if (doc.containsKey("evaluation")) {
     if (doc["evaluation"].isNull()) {
-      response.evaluation = 0.0f;
+      stockfishResp.evaluation = 0.0f;
     } else {
-      response.evaluation = doc["evaluation"].as<float>();
+      stockfishResp.evaluation = doc["evaluation"].as<float>();
     }
   } else {
-    response.evaluation = 0.0f;
+    stockfishResp.evaluation = 0.0f;
   }
 
   // Parse mate (can be null)
-  response.hasMate = false;
-  response.mateInMoves = 0;
+  stockfishResp.mateInMoves = 0;
+  stockfishResp.hasMate = false;
   if (doc.containsKey("mate")) {
     if (!doc["mate"].isNull()) {
-      response.mateInMoves = doc["mate"].as<int>();
-      response.hasMate = true;
+      stockfishResp.mateInMoves = doc["mate"].as<int>();
+      stockfishResp.hasMate = true;
     }
   }
 
   // Parse bestmove (format: "bestmove <move> ponder <move>")
-  response.bestMove = "";
-  response.ponderMove = "";
+  stockfishResp.bestMove = "";
+  stockfishResp.ponderMove = "";
   if (doc.containsKey("bestmove")) {
     String bestmoveStr = doc["bestmove"].as<String>();
 
@@ -64,7 +96,7 @@ bool StockfishAPI::parseResponse(const String& jsonString, StockfishResponse& re
     int moveEnd = bestmoveStr.indexOf(" ", moveStart);
 
     if (moveEnd != -1) {
-      response.bestMove = bestmoveStr.substring(moveStart, moveEnd);
+      stockfishResp.bestMove = bestmoveStr.substring(moveStart, moveEnd);
 
       // Extract ponder move if it exists
       int ponderStart = bestmoveStr.indexOf("ponder ");
@@ -73,21 +105,89 @@ bool StockfishAPI::parseResponse(const String& jsonString, StockfishResponse& re
         int ponderEnd = bestmoveStr.indexOf(" ", ponderStart);
 
         if (ponderEnd != -1) {
-          response.ponderMove = bestmoveStr.substring(ponderStart, ponderEnd);
+          stockfishResp.ponderMove = bestmoveStr.substring(ponderStart, ponderEnd);
         } else {
-          response.ponderMove = bestmoveStr.substring(ponderStart);
+          stockfishResp.ponderMove = bestmoveStr.substring(ponderStart);
         }
       }
     } else {
-      // No space found, use entire string after "bestmove "
-      response.bestMove = bestmoveStr.substring(moveStart);
+      // No space found, use entire string after "bestmove " (normal if this move is a checkmate)
+      stockfishResp.bestMove = bestmoveStr.substring(moveStart);
     }
   }
 
   // Parse continuation (top engine line)
-  response.continuation = "";
+  stockfishResp.continuation = "";
   if (doc.containsKey("continuation")) {
-    response.continuation = doc["continuation"].as<String>();
+    stockfishResp.continuation = doc["continuation"].as<String>();
+  }
+
+  return true;
+}
+
+bool StockfishAPI::validateUCIMove(const String& move, String& errorMessage, int& fromRow, int& fromCol, int& toRow, int& toCol) {
+  errorMessage = "";
+  fromRow = fromCol = toRow = toCol = -1;
+
+  // Length check (4 or 5 characters)
+  size_t len = move.length();
+  if (len < 4 || len > 5) {
+    errorMessage = "Invalid move length";
+    return false;
+  }
+
+  // Extract coordinates
+  char fromFile = move[0];
+  char fromRank = move[1];
+  char toFile = move[2];
+  char toRank = move[3];
+
+  // File validation [a-h]
+  if (fromFile < 'a' || fromFile > 'h') {
+    errorMessage = "Invalid from-file (must be a-h)";
+    return false;
+  }
+  if (toFile < 'a' || toFile > 'h') {
+    errorMessage = "Invalid to-file (must be a-h)";
+    return false;
+  }
+
+  // Rank validation [1-8]
+  if (fromRank < '1' || fromRank > '8') {
+    errorMessage = "Invalid from-rank (must be 1-8)";
+    return false;
+  }
+  if (toRank < '1' || toRank > '8') {
+    errorMessage = "Invalid to-rank (must be 1-8)";
+    return false;
+  }
+
+  // Convert to array coordinates (rank 1 = row 7, rank 8 = row 0)
+  fromCol = fromFile - 'a';
+  fromRow = 7 - ((fromRank - '0') - 1);
+  toCol = toFile - 'a';
+  toRow = 7 - ((toRank - '0') - 1);
+
+  // Validate coordinate ranges
+  if (fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8 ||
+      toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8) {
+    errorMessage = "Invalid coordinates after parsing";
+    return false;
+  }
+
+  // From and to squares must differ
+  if (fromFile == toFile && fromRank == toRank) {
+    errorMessage = "From and to squares are identical";
+    return false;
+  }
+
+  // Promotion (optional 5th char) must be q, r, b, or n (case-insensitive)
+  if (len == 5) {
+    char promo = tolower(move[4]);
+    if (promo != 'q' && promo != 'r' && promo != 'b' && promo != 'n') {
+      errorMessage = "Invalid promotion piece";
+      return false;
+    }
   }
 
   return true;
@@ -97,27 +197,27 @@ String StockfishAPI::buildRequestURL(const String& fen, int depth) {
   // Validate depth (min 5 max 16)
   int validDepth = depth > 16 ? 16 : (depth < 5 ? 5 : depth);
 
-  // Build the URL with URL encoding
-  String url = "https://stockfish.online/api/s/v2.php?fen=";
+  // Build just the path + query (no scheme/host) so callers can reuse host/port constants
+  String path = String(STOCKFISH_API_PATH) + "?fen=";
 
   // URL encode the FEN string (space becomes %20, etc)
   for (int i = 0; i < fen.length(); i++) {
     char c = fen[i];
     if (c == ' ') {
-      url += "%20";
+      path += "%20";
     } else if (c == '/' || isalnum(c) || c == '-') {
-      url += c;
+      path += c;
     } else {
       // For other special characters, use percent encoding
-      url += '%';
-      url += String(c >> 4, HEX);
-      url += String(c & 0xF, HEX);
+      path += '%';
+      path += String(c >> 4, HEX);
+      path += String(c & 0xF, HEX);
     }
   }
 
   // Add depth parameter
-  url += "&depth=";
-  url += validDepth;
+  path += "&depth=";
+  path += validDepth;
 
-  return url;
+  return path;
 }

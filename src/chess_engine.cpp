@@ -46,7 +46,10 @@ void ChessEngine::getPossibleMoves(const char board[8][8], int row, int col, int
 
 // Pawn move generation
 void ChessEngine::addPawnMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
-  int direction = (pieceColor == 'w') ? 1 : -1;
+  // Board layout: row 0 = rank 8 (black), row 7 = rank 1 (White)
+  // White pawns move from row 6 (rank 2) toward row 0 (rank 8): direction -1
+  // Black pawns move from row 1 (rank 7) toward row 7 (rank 1): direction +1
+  int direction = (pieceColor == 'w') ? -1 : 1;
 
   // One square forward
   if (isValidSquare(row + direction, col) && isSquareEmpty(board, row + direction, col)) {
@@ -55,7 +58,8 @@ void ChessEngine::addPawnMoves(const char board[8][8], int row, int col, char pi
     moveCount++;
 
     // Initial two-square move
-    if ((pieceColor == 'w' && row == 1) || (pieceColor == 'b' && row == 6)) {
+    // White pawns start at row 6 (rank 2), Black pawns start at row 1 (rank 7)
+    if ((pieceColor == 'w' && row == 6) || (pieceColor == 'b' && row == 1)) {
       if (isSquareEmpty(board, row + 2 * direction, col)) {
         moves[moveCount][0] = row + 2 * direction;
         moves[moveCount][1] = col;
@@ -223,10 +227,11 @@ bool ChessEngine::isValidMove(const char board[8][8], int fromRow, int fromCol, 
 
 // Check if a pawn move results in promotion
 bool ChessEngine::isPawnPromotion(char piece, int targetRow) {
-  if (piece == 'P' && targetRow == 7)
-    return true; // White pawn reaches 8th rank
-  if (piece == 'p' && targetRow == 0)
-    return true; // Black pawn reaches 1st rank
+  // Board layout: row 0 = rank 8, row 7 = rank 1
+  if (piece == 'P' && targetRow == 0)
+    return true; // White pawn reaches row 0 (rank 8)
+  if (piece == 'p' && targetRow == 7)
+    return true; // Black pawn reaches row 7 (rank 
   return false;
 }
 
@@ -237,11 +242,7 @@ char ChessEngine::getPromotedPiece(char piece) {
 
 // Utility function to print a move in readable format
 void ChessEngine::printMove(int fromRow, int fromCol, int toRow, int toCol) {
-  Serial.print((char)('a' + fromCol));
-  Serial.print(fromRow + 1);
-  Serial.print(" to ");
-  Serial.print((char)('a' + toCol));
-  Serial.println(toRow + 1);
+  Serial.printf("%c%d to %c%d\n", (char)('a' + fromCol), fromRow + 1, (char)('a' + toCol), toRow + 1);
 }
 
 // Convert algebraic notation file (a-h) to column index (0-7)

@@ -37,10 +37,7 @@ WiFiManagerESP32::WiFiManagerESP32(BoardDriver* boardDriver) : server(AP_PORT) {
 void WiFiManagerESP32::begin() {
   Serial.println("=== Starting OpenChess WiFi Manager (ESP32) ===");
   // ESP32 can run both AP and Station modes simultaneously. Start Access Point first (always available)
-  Serial.print("Creating Access Point with SSID: ");
-  Serial.println(AP_SSID);
-  Serial.print("Using password: ");
-  Serial.println(AP_PASSWORD);
+  Serial.printf("Creating Access Point with SSID: %s\nUsing password: %s\n", AP_SSID, AP_PASSWORD);
   if (!WiFi.softAP(AP_SSID, AP_PASSWORD)) {
     Serial.println("ERROR: Failed to create Access Point!");
     return;
@@ -51,15 +48,9 @@ void WiFiManagerESP32::begin() {
   // Print connection information
   Serial.println("=== WiFi Connection Information ===");
   if (connected) {
-    Serial.print("Connected to WiFi: ");
-    Serial.println(WiFi.SSID());
-    Serial.print("Access board via: http://");
-    Serial.println(WiFi.localIP());
+    Serial.printf("Connected to WiFi: %s\nAccess board via: http://%s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
   }
-  Serial.print("Access board via: http://");
-  Serial.println(WiFi.softAPIP());
-  Serial.print("MAC Address: ");
-  Serial.println(WiFi.softAPmacAddress());
+  Serial.printf("Access board via: http://%s\nMAC Address: %s\n", WiFi.softAPIP().toString().c_str(), WiFi.softAPmacAddress().c_str());
   Serial.println("=====================================");
 
   // Set up web server routes with async handlers
@@ -198,16 +189,12 @@ void WiFiManagerESP32::clearPendingEdit() {
 bool WiFiManagerESP32::connectToWiFi(String ssid, String password, bool fromWeb) {
   if (!fromWeb && WiFi.status() == WL_CONNECTED) {
     Serial.println("Already connected to WiFi");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
+    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
     apMode = false; // We're connected, but AP is still running
     return true;
   }
   Serial.println("=== Connecting to WiFi Network" + String(fromWeb ? "(from web)" : "") + " ===");
-  Serial.print("SSID: ");
-  Serial.println(ssid);
-  Serial.print("Password: ");
-  Serial.println(password);
+  Serial.printf("SSID: %s\nPassword: %s\n", ssid.c_str(), password.c_str());
 
   // ESP32 can run both AP and Station modes simultaneously
   WiFi.mode(WIFI_AP_STA); // Enable both AP and Station modes
@@ -218,16 +205,12 @@ bool WiFiManagerESP32::connectToWiFi(String ssid, String password, bool fromWeb)
   while (WiFi.status() != WL_CONNECTED && attempts < 10) {
     _boardDriver->showConnectingAnimation();
     attempts++;
-    Serial.print("Connection attempt ");
-    Serial.print(attempts);
-    Serial.print("/10 - Status: ");
-    Serial.println(WiFi.status());
+    Serial.printf("Connection attempt %d/10 - Status: %d\n", attempts, WiFi.status());
   }
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Connected to WiFi!");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
+    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
     apMode = false; // We're connected, but AP is still running
     return true;
   } else {

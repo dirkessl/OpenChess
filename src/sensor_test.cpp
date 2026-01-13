@@ -1,4 +1,5 @@
 #include "sensor_test.h"
+#include "chess_utils.h"
 #include <Arduino.h>
 
 // Expected initial configuration for sensor testing
@@ -48,7 +49,7 @@ void SensorTest::update() {
   // Print board state periodically for debugging
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 2000) { // Print every 2 seconds
-    boardDriver->printBoardState(INITIAL_BOARD);
+    ChessUtils::printBoard(INITIAL_BOARD);
     lastPrint = millis();
   }
 

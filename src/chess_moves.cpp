@@ -1,17 +1,16 @@
 #include "chess_moves.h"
+#include "chess_utils.h"
 #include <Arduino.h>
 
-// Expected initial configuration (as printed in the grid)
-// Standard chess: Queen on her own color (white queen on light, black queen on dark)
 const char ChessMoves::INITIAL_BOARD[8][8] = {
-    {'R', 'N', 'B', 'K', 'Q', 'B', 'N', 'R'}, // row 0 (rank 8 - black pieces at top)
-    {'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'}, // row 1 (rank 7)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 2 (rank 6)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 3 (rank 5)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 4 (rank 4)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 5 (rank 3)
-    {'p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'}, // row 6 (rank 2)
-    {'r', 'n', 'b', 'k', 'q', 'b', 'n', 'r'}  // row 7 (rank 1 - white pieces at bottom)
+    {'r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'}, // row 0 = rank 8 (black pieces, top row)
+    {'p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'}, // row 1 = rank 7 (black pawns)
+    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 2 = rank 6
+    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 3 = rank 5
+    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 4 = rank 4
+    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 5 = rank 3
+    {'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'}, // row 6 = rank 2 (white pawns)
+    {'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'}  // row 7 = rank 1 (White pieces, bottom row)
 };
 
 ChessMoves::ChessMoves(BoardDriver* bd, ChessEngine* ce) : boardDriver(bd), chessEngine(ce) {
@@ -21,17 +20,10 @@ ChessMoves::ChessMoves(BoardDriver* bd, ChessEngine* ce) : boardDriver(bd), ches
 
 void ChessMoves::begin() {
   Serial.println("Starting Chess Game Mode...");
-
-  // Copy expected configuration into our board state
   initializeBoard();
-
-  // Wait for board setup
   waitForBoardSetup();
-
   Serial.println("Chess game ready to start!");
   boardDriver->fireworkAnimation();
-
-  // Initialize sensor previous state for move detection
   boardDriver->readSensors();
   boardDriver->updateSensorPrev();
 }
@@ -49,9 +41,7 @@ void ChessMoves::update() {
         if (piece == ' ')
           continue;
 
-        Serial.print("Piece lifted from ");
-        Serial.print((char)('a' + col));
-        Serial.println(row + 1);
+        Serial.printf("Piece lifted from %c%d\n", (char)('a' + col), row + 1);
 
         // Generate possible moves
         int moveCount = 0;
@@ -114,9 +104,7 @@ void ChessMoves::update() {
 
               // For capture moves: detect when the target piece is removed
               if (board[r2][c2] != ' ' && !boardDriver->getSensorState(r2, c2) && boardDriver->getSensorPrev(r2, c2)) {
-                Serial.print("Capture initiated at ");
-                Serial.print((char)('a' + c2));
-                Serial.println(r2 + 1);
+                Serial.printf("Capture initiated at %c%d\n", (char)('a' + c2), r2 + 1);
 
                 // Store the target square and wait for the capturing piece to be placed there
                 targetRow = r2;
@@ -187,9 +175,7 @@ void ChessMoves::update() {
         }
 
         if (legalMove) {
-          Serial.print("Legal move to ");
-          Serial.print((char)('a' + targetCol));
-          Serial.println(targetRow + 1);
+          Serial.printf("Legal move to %c%d\n", (char)('a' + targetCol), targetRow + 1);
 
           // Play capture animation if needed
           if (board[targetRow][targetCol] != ' ') {
@@ -238,7 +224,7 @@ void ChessMoves::waitForBoardSetup() {
   Serial.println("Waiting for pieces to be placed...");
   while (!boardDriver->checkInitialBoard(INITIAL_BOARD)) {
     boardDriver->updateSetupDisplay(INITIAL_BOARD);
-    boardDriver->printBoardState(INITIAL_BOARD);
+    ChessUtils::printBoard(INITIAL_BOARD);
     delay(500);
   }
 }
@@ -252,19 +238,9 @@ void ChessMoves::processMove(int fromRow, int fromCol, int toRow, int toCol, cha
 void ChessMoves::checkForPromotion(int targetRow, int targetCol, char piece) {
   if (chessEngine->isPawnPromotion(piece, targetRow)) {
     char promotedPiece = chessEngine->getPromotedPiece(piece);
-
-    Serial.print((piece == 'P' ? "White" : "Black"));
-    Serial.print(" pawn promoted to Queen at ");
-    Serial.print((char)('a' + targetCol));
-    Serial.println((piece == 'P' ? "8" : "1"));
-
-    // Play promotion animation
+    Serial.println(String(piece == 'P' ? "White" : "Black") + " pawn promoted to Queen at " + String(((char)('a' + targetCol))) + String(targetRow + 1));
     boardDriver->promotionAnimation(targetCol);
-
-    // Promote to queen in board state
     board[targetRow][targetCol] = promotedPiece;
-
-    // Handle the promotion process
     handlePromotion(targetRow, targetCol, piece);
   }
 }
@@ -342,4 +318,5 @@ void ChessMoves::setBoardState(char newBoardState[8][8]) {
   // Update sensor previous state to match new board
   boardDriver->readSensors();
   boardDriver->updateSensorPrev();
+  ChessUtils::printBoard(board);
 }
