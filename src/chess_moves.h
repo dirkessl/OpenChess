@@ -19,20 +19,22 @@ class ChessMoves {
   char board[8][8];
   char currentTurn; // 'w' or 'b'
 
+  // Castling rights bitmask (KQkq = 0b1111)
+  uint8_t castlingRights;
+
   // Helper functions
   void initializeBoard();
+  void handleCastlingRookMove(int kingFromRow, int kingFromCol, int kingToRow, int kingToCol, char kingPiece);
   void waitForBoardSetup();
   void processMove(int fromRow, int fromCol, int toRow, int toCol, char piece);
   void checkForPromotion(int targetRow, int targetCol, char piece);
   void handlePromotion(int targetRow, int targetCol, char piece);
-  void checkGameState();
 
  public:
   ChessMoves(BoardDriver* bd, ChessEngine* ce);
   void begin();
   void update();
   bool isActive();
-  void reset();
 
   // Get current board state for WiFi display
   void getBoardState(char boardState[8][8]);

@@ -155,8 +155,8 @@ void loop() {
     firstLoop = false;
   }
 
-  // Print periodic status every 10 seconds
-  if (millis() - lastDebugPrint > 10000) {
+  // Print periodic status every 20 seconds
+  if (millis() - lastDebugPrint > 20000) {
     Serial.printf("DEBUG: Loop running, uptime: %lu seconds\n", millis() / 1000);
     lastDebugPrint = millis();
   }
@@ -289,7 +289,7 @@ void loop() {
     }
   }
 
-  delay(50); // Small delay to prevent overwhelming the system
+  delay(25); // Small delay to prevent overwhelming the system
 }
 
 // ---------------------------

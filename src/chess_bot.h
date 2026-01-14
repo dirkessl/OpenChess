@@ -44,12 +44,15 @@ class ChessBot {
   bool isWhiteTurn;
   bool playerIsWhite; // true = player plays White, false = player plays Black
   bool gameStarted;
+  bool gameOver;
   bool botThinking;
   bool wifiConnected;
   float currentEvaluation; // Stockfish evaluation (in pawns, positive = white advantage)
 
+  // Castling rights bitmask (KQkq = 0b1111)
+  uint8_t castlingRights;
+
   // WiFi and API
-  bool connectToWiFi();
   String makeStockfishRequest(String fen);
   bool parseStockfishResponse(String response, String& bestMove, float& evaluation);
 
@@ -62,8 +65,9 @@ class ChessBot {
   void processPlayerMove(int fromRow, int fromCol, int toRow, int toCol, char piece);
   void makeBotMove();
   void showBotThinking();
-  void showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toCol);
-  void waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int toCol);
+  void showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toCol, bool isCapture);
+  void waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int toCol, bool isCapture);
+  void waitForBotCastlingCompletion(int kingFromRow, int kingFromCol, int kingToRow, int kingToCol);
   void confirmSquareCompletion(int row, int col);
 
  public:

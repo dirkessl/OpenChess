@@ -1,5 +1,7 @@
 #include "chess_moves.h"
+#include "chess_common.h"
 #include "chess_utils.h"
+#include "led_colors.h"
 #include <Arduino.h>
 
 const char ChessMoves::INITIAL_BOARD[8][8] = {
@@ -13,15 +15,12 @@ const char ChessMoves::INITIAL_BOARD[8][8] = {
     {'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'}  // row 7 = rank 1 (White pieces, bottom row)
 };
 
-ChessMoves::ChessMoves(BoardDriver* bd, ChessEngine* ce) : boardDriver(bd), chessEngine(ce) {
-  // Initialize board state
-  initializeBoard();
-  currentTurn = 'w'; // White starts
-}
+ChessMoves::ChessMoves(BoardDriver* bd, ChessEngine* ce) : boardDriver(bd), chessEngine(ce);
 
 void ChessMoves::begin() {
   Serial.println("Starting Chess Game Mode...");
   initializeBoard();
+  currentTurn = 'w'; // White starts
   waitForBoardSetup();
   Serial.println("Chess game ready to start!");
   boardDriver->fireworkAnimation();
@@ -31,6 +30,9 @@ void ChessMoves::begin() {
 
 void ChessMoves::update() {
   boardDriver->readSensors();
+
+  static constexpr unsigned long kPlacementDebounceMs = 200; // require stable contact before accepting placement
+  static constexpr unsigned long kPlacementPollDelayMs = 20;
 
   // Look for a piece pickup
   for (int row = 0; row < 8; row++) {
@@ -56,12 +58,13 @@ void ChessMoves::update() {
         Serial.printf("Piece lifted from %c%d\n", (char)('a' + col), row + 1);
 
         // Generate possible moves
+        chessEngine->setCastlingRights(castlingRights);
         int moveCount = 0;
         int moves[28][2]; // up to 28 moves (maximum for a queen)
         chessEngine->getPossibleMoves(board, row, col, moveCount, moves);
 
         // Light up current square and possible move squares
-        boardDriver->setSquareLED(row, col, 0, 0, 0, 100); // Dimmer, but solid
+        boardDriver->setSquareLED(row, col, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
 
         // Highlight possible move squares (including captures)
         for (int i = 0; i < moveCount; i++) {
@@ -70,9 +73,9 @@ void ChessMoves::update() {
 
           // Different highlighting for empty squares vs capture squares
           if (board[r][c] == ' ') {
-            boardDriver->setSquareLED(r, c, 0, 0, 0, 50); // Soft white for moves
+            boardDriver->setSquareLED(r, c, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
           } else {
-            boardDriver->setSquareLED(r, c, 255, 0, 0, 50); // Red tint for captures
+            boardDriver->setSquareLED(r, c, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
           }
         }
         boardDriver->showLEDs();
@@ -82,16 +85,40 @@ void ChessMoves::update() {
         bool piecePlaced = false;
         bool captureInProgress = false;
 
+        int pendingRow = -1;
+        int pendingCol = -1;
+        unsigned long pendingSinceMs = 0;
+
         // Wait for a piece placement on any square
         while (!piecePlaced) {
           boardDriver->readSensors();
 
+          // Debounce: if a candidate square is briefly touched (e.g., sliding a pawn across squares),
+          // don’t commit the move until the sensor stays occupied for kPlacementDebounceMs.
+          if (pendingRow != -1) {
+            if (boardDriver->getSensorState(pendingRow, pendingCol)) {
+              if (millis() - pendingSinceMs >= kPlacementDebounceMs) {
+                targetRow = pendingRow;
+                targetCol = pendingCol;
+                piecePlaced = true;
+                break;
+              }
+            } else {
+              pendingRow = -1;
+              pendingCol = -1;
+              pendingSinceMs = 0;
+            }
+            delay(kPlacementPollDelayMs);
+            continue;
+          }
+
           // First check if the original piece was placed back
           if (boardDriver->getSensorState(row, col)) {
-            targetRow = row;
-            targetCol = col;
-            piecePlaced = true;
-            break;
+            pendingRow = row;
+            pendingCol = col;
+            pendingSinceMs = millis();
+            delay(kPlacementPollDelayMs);
+            continue;
           }
 
           // Then check all squares for a regular move or capture initiation
@@ -129,23 +156,30 @@ void ChessMoves::update() {
 
                 // Wait for the capturing piece to be placed
                 bool capturePiecePlaced = false;
+                unsigned long capturePlaceSinceMs = 0;
                 while (!capturePiecePlaced) {
                   boardDriver->readSensors();
                   if (boardDriver->getSensorState(r2, c2)) {
-                    capturePiecePlaced = true;
-                    piecePlaced = true;
-                    break;
+                    if (capturePlaceSinceMs == 0) {
+                      capturePlaceSinceMs = millis();
+                    } else if (millis() - capturePlaceSinceMs >= kPlacementDebounceMs) {
+                      capturePiecePlaced = true;
+                      piecePlaced = true;
+                      break;
+                    }
+                  } else {
+                    capturePlaceSinceMs = 0;
                   }
-                  delay(50);
+                  delay(kPlacementPollDelayMs);
                 }
                 break;
               }
 
               // For normal non-capture moves: detect when a piece is placed on an empty square
-              else if (board[r2][c2] == ' ' && boardDriver->getSensorState(r2, c2) && !boardDriver->getSensorPrev(r2, c2)) {
-                targetRow = r2;
-                targetCol = c2;
-                piecePlaced = true;
+              else if (board[r2][c2] == ' ' && boardDriver->getSensorState(r2, c2)) {
+                pendingRow = r2;
+                pendingCol = c2;
+                pendingSinceMs = millis();
                 break;
               }
             }
@@ -153,7 +187,7 @@ void ChessMoves::update() {
               break;
           }
 
-          delay(50);
+          delay(kPlacementPollDelayMs);
         }
 
         // Check if piece is replaced in the original spot
@@ -201,12 +235,12 @@ void ChessMoves::update() {
           // Check for pawn promotion
           checkForPromotion(targetRow, targetCol, piece);
 
-          // Confirmation: Double blink destination square
+          // Confirmation: Double blink destination square (green)
           for (int blink = 0; blink < 2; blink++) {
-            boardDriver->setSquareLED(targetRow, targetCol, 0, 0, 0, 255);
+            boardDriver->setSquareLED(targetRow, targetCol, LedColors::ConfirmGreen.r, LedColors::ConfirmGreen.g, LedColors::ConfirmGreen.b);
             boardDriver->showLEDs();
             delay(200);
-            boardDriver->setSquareLED(targetRow, targetCol, 0, 0, 0, 50);
+            boardDriver->setSquareLED(targetRow, targetCol, 0, 0, 0);
             boardDriver->showLEDs();
             delay(200);
           }
@@ -225,11 +259,47 @@ void ChessMoves::update() {
 }
 
 void ChessMoves::initializeBoard() {
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
-      board[row][col] = INITIAL_BOARD[row][col];
-    }
+  ChessCommon::copyBoard(INITIAL_BOARD, board);
+  castlingRights = 0x0F;
+  chessEngine->setCastlingRights(castlingRights);
+}
+
+void ChessMoves::handleCastlingRookMove(int kingFromRow, int kingFromCol, int kingToRow, int kingToCol, char kingPiece) {
+  int deltaCol = kingToCol - kingFromCol;
+  if (kingFromRow != kingToRow) return;
+  if (deltaCol != 2 && deltaCol != -2) return;
+
+  int rookFromCol = (deltaCol == 2) ? 7 : 0;
+  int rookToCol = (deltaCol == 2) ? 5 : 3;
+
+  // Update internal board state for rook
+  ChessCommon::applyCastlingRookInternal(board, kingFromRow, kingFromCol, kingToRow, kingToCol, kingPiece);
+
+  Serial.printf("Castling: please move rook from %c%d to %c%d\n",
+                (char)('a' + rookFromCol), kingToRow + 1,
+                (char)('a' + rookToCol), kingToRow + 1);
+
+  // Prompt the user on the physical board
+  // Wait for rook to be lifted from its original square
+  while (boardDriver->getSensorState(kingToRow, rookFromCol)) {
+    boardDriver->readSensors();
+    boardDriver->clearAllLEDs();
+    boardDriver->setSquareLED(kingToRow, rookFromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
+    boardDriver->setSquareLED(kingToRow, rookToCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+    boardDriver->showLEDs();
+    delay(100);
   }
+
+  // Wait for rook to be placed on destination square
+  while (!boardDriver->getSensorState(kingToRow, rookToCol)) {
+    boardDriver->readSensors();
+    boardDriver->clearAllLEDs();
+    boardDriver->setSquareLED(kingToRow, rookToCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+    boardDriver->showLEDs();
+    delay(100);
+  }
+
+  boardDriver->clearAllLEDs();
 }
 
 void ChessMoves::waitForBoardSetup() {
@@ -242,23 +312,33 @@ void ChessMoves::waitForBoardSetup() {
 }
 
 void ChessMoves::processMove(int fromRow, int fromCol, int toRow, int toCol, char piece) {
+  char capturedPiece = board[toRow][toCol];
+  bool isCastling = ChessCommon::isCastlingMove(fromRow, fromCol, toRow, toCol, piece);
+
   // Update board state
   board[toRow][toCol] = piece;
   board[fromRow][fromCol] = ' ';
+
+  // If this was castling, also move the rook (and wait for physical rook move)
+  if (isCastling) {
+    handleCastlingRookMove(fromRow, fromCol, toRow, toCol, piece);
+  }
+
+  ChessCommon::updateCastlingRightsAfterMove(castlingRights, fromRow, fromCol, toRow, toCol, piece, capturedPiece);
+  chessEngine->setCastlingRights(castlingRights);
 
   // Switch turns
   currentTurn = (currentTurn == 'w') ? 'b' : 'w';
 
   // Check for check, checkmate, or stalemate
-  checkGameState();
+  (void)ChessCommon::handleGameState(boardDriver, chessEngine, board, currentTurn);
 }
 
 void ChessMoves::checkForPromotion(int targetRow, int targetCol, char piece) {
-  if (chessEngine->isPawnPromotion(piece, targetRow)) {
-    char promotedPiece = chessEngine->getPromotedPiece(piece);
+  char promotedPiece = ' ';
+  if (ChessCommon::applyPawnPromotionIfNeeded(chessEngine, board, targetRow, targetCol, piece, promotedPiece)) {
     Serial.println(String(piece == 'P' ? "White" : "Black") + " pawn promoted to Queen at " + String(((char)('a' + targetCol))) + String(targetRow + 1));
     boardDriver->promotionAnimation(targetCol);
-    board[targetRow][targetCol] = promotedPiece;
     handlePromotion(targetRow, targetCol, piece);
   }
 }
@@ -313,65 +393,17 @@ bool ChessMoves::isActive() {
   return true; // Simple implementation for now
 }
 
-void ChessMoves::reset() {
-  boardDriver->clearAllLEDs();
-  initializeBoard();
-}
-
 void ChessMoves::getBoardState(char boardState[8][8]) {
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
-      boardState[row][col] = board[row][col];
-    }
-  }
+  ChessCommon::copyBoard(board, boardState);
 }
 
 void ChessMoves::setBoardState(char newBoardState[8][8]) {
   Serial.println("Board state updated via WiFi edit");
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
-      board[row][col] = newBoardState[row][col];
-    }
-  }
+  ChessCommon::copyBoard(newBoardState, board);
+  castlingRights = ChessCommon::recomputeCastlingRightsFromBoard(board);
+  chessEngine->setCastlingRights(castlingRights);
   // Update sensor previous state to match new board
   boardDriver->readSensors();
   boardDriver->updateSensorPrev();
   ChessUtils::printBoard(board);
-}
-
-// Check game state after a move
-void ChessMoves::checkGameState() {
-  const char* colorName = (currentTurn == 'w') ? "White" : "Black";
-
-  // Check for checkmate
-  if (chessEngine->isCheckmate(board, currentTurn)) {
-    const char* winnerName = (currentTurn == 'w') ? "Black" : "White";
-    Serial.printf("CHECKMATE! %s wins!\n", winnerName);
-    boardDriver->fireworkAnimation();
-    return;
-  }
-
-  // Check for stalemate
-  if (chessEngine->isStalemate(board, currentTurn)) {
-    Serial.println("STALEMATE! Game is a draw.");
-    boardDriver->clearAllLEDs();
-    return;
-  }
-
-  // Check for check (but not checkmate)
-  if (chessEngine->isKingInCheck(board, currentTurn)) {
-    Serial.printf("%s is in CHECK!\n", colorName);
-    boardDriver->clearAllLEDs();
-    // Find the king position and blink it red
-    char kingPiece = (currentTurn == 'w') ? 'K' : 'k';
-    for (int row = 0; row < 8; row++) {
-      for (int col = 0; col < 8; col++) {
-        if (board[row][col] == kingPiece) {
-          // Blink the king's square orange/yellow to indicate check
-          boardDriver->blinkSquare(row, col, 255, 100, 0);
-          return;
-        }
-      }
-    }
-  }
 }

@@ -1,5 +1,15 @@
 #include "chess_utils.h"
 
+String ChessUtils::castlingRightsToString(uint8_t rights) {
+  String s = "";
+  if (rights & 0x01) s += "K";
+  if (rights & 0x02) s += "Q";
+  if (rights & 0x04) s += "k";
+  if (rights & 0x08) s += "q";
+  if (s.length() == 0) s = "-";
+  return s;
+}
+
 String ChessUtils::boardToFEN(const char board[8][8], bool isWhiteTurn, const char* castlingRights) {
   String fen = "";
 

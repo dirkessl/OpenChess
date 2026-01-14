@@ -44,6 +44,8 @@ void BoardDriver::begin() {
     for (int col = 0; col < NUM_COLS; col++) {
       sensorState[row][col] = false;
       sensorPrev[row][col] = false;
+      sensorRaw[row][col] = false;
+      sensorDebounceTime[row][col] = 0;
     }
   }
 }
@@ -72,10 +74,32 @@ void BoardDriver::enableCol(int col) {
 }
 
 void BoardDriver::readSensors() {
+  const unsigned long DEBOUNCE_DELAY = 100; // 100ms debounce time
+  unsigned long currentTime = millis();
+
   for (int col = 0; col < NUM_COLS; col++) {
     enableCol(col);
-    for (int row = 0; row < NUM_ROWS; row++)
-      sensorState[row][col] = digitalRead(rowPins[row]) == LOW;
+    for (int row = 0; row < NUM_ROWS; row++) {
+      // Read raw sensor value
+      bool rawReading = digitalRead(rowPins[row]) == LOW;
+
+      // Check if raw reading differs from current debounced state
+      if (rawReading != sensorState[row][col]) {
+        // If this is a new change, start the debounce timer
+        if (rawReading != sensorRaw[row][col]) {
+          sensorRaw[row][col] = rawReading;
+          sensorDebounceTime[row][col] = currentTime;
+        }
+        // If the change has been stable for the debounce period, accept it
+        else if (currentTime - sensorDebounceTime[row][col] >= DEBOUNCE_DELAY) {
+          sensorState[row][col] = rawReading;
+        }
+      } else {
+        // Raw reading matches debounced state, reset raw tracking
+        sensorRaw[row][col] = rawReading;
+        sensorDebounceTime[row][col] = currentTime;
+      }
+    }
   }
   disableAllCols();
 }
@@ -154,7 +178,7 @@ void BoardDriver::fireworkAnimation() {
         float dist = sqrt(dx * dx + dy * dy);
         int pixelIndex = getPixelIndex(row, col);
         if (fabs(dist - radius) < 0.5)
-          strip.setPixelColor(pixelIndex, strip.Color(0, 0, 0, 255));
+          strip.setPixelColor(pixelIndex, strip.Color(255, 255, 255));
         else
           strip.setPixelColor(pixelIndex, 0);
       }
@@ -172,7 +196,7 @@ void BoardDriver::fireworkAnimation() {
         float dist = sqrt(dx * dx + dy * dy);
         int pixelIndex = getPixelIndex(row, col);
         if (fabs(dist - radius) < 0.5)
-          strip.setPixelColor(pixelIndex, strip.Color(0, 0, 0, 255));
+          strip.setPixelColor(pixelIndex, strip.Color(255, 255, 255));
         else
           strip.setPixelColor(pixelIndex, 0);
       }
@@ -190,7 +214,7 @@ void BoardDriver::fireworkAnimation() {
         float dist = sqrt(dx * dx + dy * dy);
         int pixelIndex = getPixelIndex(row, col);
         if (fabs(dist - radius) < 0.5)
-          strip.setPixelColor(pixelIndex, strip.Color(0, 0, 0, 255));
+          strip.setPixelColor(pixelIndex, strip.Color(255, 255, 255));
         else
           strip.setPixelColor(pixelIndex, 0);
       }
@@ -222,8 +246,8 @@ void BoardDriver::captureAnimation() {
         if (dist >= pulseWidth - 0.5 && dist <= pulseWidth + 0.5) {
           // Alternate between red and orange for capture effect
           uint32_t color = (pulse % 2 == 0)
-                               ? strip.Color(255, 0, 0, 0)    // Red
-                               : strip.Color(255, 165, 0, 0); // Orange
+                               ? strip.Color(255, 0, 0)    // Red
+                               : strip.Color(255, 165, 0); // Orange
           strip.setPixelColor(pixelIndex, color);
         } else {
           strip.setPixelColor(pixelIndex, 0);
@@ -239,7 +263,7 @@ void BoardDriver::captureAnimation() {
 }
 
 void BoardDriver::promotionAnimation(int col) {
-  const uint32_t PROMOTION_COLOR = strip.Color(255, 215, 0, 50); // Gold with white
+  const uint32_t PROMOTION_COLOR = strip.Color(255, 215, 0); // Gold
 
   // Column-based waterfall animation
   for (int step = 0; step < 16; step++) {

@@ -6,11 +6,20 @@
 // ---------------------------
 
 ChessEngine::ChessEngine() {
-  // Constructor - nothing to initialize for now
+  // Default to all castling rights available
+  castlingRights = 0x0F;
+}
+
+void ChessEngine::setCastlingRights(uint8_t rights) {
+  castlingRights = rights;
+}
+
+uint8_t ChessEngine::getCastlingRights() const {
+  return castlingRights;
 }
 
 // Generate pseudo-legal moves (without check filtering)
-void ChessEngine::getPseudoLegalMoves(const char board[8][8], int row, int col, int& moveCount, int moves[][2]) {
+void ChessEngine::getPseudoLegalMoves(const char board[8][8], int row, int col, int& moveCount, int moves[][2], bool includeCastling) {
   moveCount = 0;
   char piece = board[row][col];
 
@@ -39,7 +48,7 @@ void ChessEngine::getPseudoLegalMoves(const char board[8][8], int row, int col, 
       addQueenMoves(board, row, col, pieceColor, moveCount, moves);
       break;
     case 'K': // King
-      addKingMoves(board, row, col, pieceColor, moveCount, moves);
+      addKingMoves(board, row, col, pieceColor, moveCount, moves, includeCastling);
       break;
   }
 }
@@ -50,7 +59,7 @@ void ChessEngine::getPossibleMoves(const char board[8][8], int row, int col, int
   int pseudoMoves[28][2];
   int pseudoMoveCount = 0;
 
-  getPseudoLegalMoves(board, row, col, pseudoMoveCount, pseudoMoves);
+  getPseudoLegalMoves(board, row, col, pseudoMoveCount, pseudoMoves, true);
 
   // Filter out moves that would leave the king in check
   moveCount = 0;
@@ -190,7 +199,7 @@ void ChessEngine::addQueenMoves(const char board[8][8], int row, int col, char p
 }
 
 // King move generation
-void ChessEngine::addKingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+void ChessEngine::addKingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2], bool includeCastling) {
   int kingMoves[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
   for (int i = 0; i < 8; i++) {
@@ -202,6 +211,57 @@ void ChessEngine::addKingMoves(const char board[8][8], int row, int col, char pi
           isSquareOccupiedByOpponent(board, newRow, newCol, pieceColor)) {
         moves[moveCount][0] = newRow;
         moves[moveCount][1] = newCol;
+        moveCount++;
+      }
+    }
+  }
+
+  if (includeCastling) {
+    addCastlingMoves(board, row, col, pieceColor, moveCount, moves);
+  }
+}
+
+bool ChessEngine::hasCastlingRight(char pieceColor, bool kingSide) const {
+  if (pieceColor == 'w') {
+    return kingSide ? ((castlingRights & 0x01) != 0) : ((castlingRights & 0x02) != 0);
+  }
+  return kingSide ? ((castlingRights & 0x04) != 0) : ((castlingRights & 0x08) != 0);
+}
+
+void ChessEngine::addCastlingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+  // Castling is only possible from the starting king square.
+  // Board layout: row 0 = rank 8, row 7 = rank 1.
+  int homeRow = (pieceColor == 'w') ? 7 : 0;
+  char kingPiece = (pieceColor == 'w') ? 'K' : 'k';
+  char rookPiece = (pieceColor == 'w') ? 'R' : 'r';
+
+  if (row != homeRow || col != 4) return;
+  if (board[row][col] != kingPiece) return;
+
+  // King cannot castle while in check.
+  if (isSquareUnderAttack(board, row, col, pieceColor)) return;
+
+  // King-side castling (e -> g)
+  if (hasCastlingRight(pieceColor, true)) {
+    // Squares between king and rook must be empty: f, g
+    if (board[homeRow][5] == ' ' && board[homeRow][6] == ' ' && board[homeRow][7] == rookPiece) {
+      // Squares king passes through must not be under attack: f, g
+      if (!isSquareUnderAttack(board, homeRow, 5, pieceColor) && !isSquareUnderAttack(board, homeRow, 6, pieceColor)) {
+        moves[moveCount][0] = homeRow;
+        moves[moveCount][1] = 6;
+        moveCount++;
+      }
+    }
+  }
+
+  // Queen-side castling (e -> c)
+  if (hasCastlingRight(pieceColor, false)) {
+    // Squares between king and rook must be empty: d, c, b
+    if (board[homeRow][3] == ' ' && board[homeRow][2] == ' ' && board[homeRow][1] == ' ' && board[homeRow][0] == rookPiece) {
+      // Squares king passes through must not be under attack: d, c
+      if (!isSquareUnderAttack(board, homeRow, 3, pieceColor) && !isSquareUnderAttack(board, homeRow, 2, pieceColor)) {
+        moves[moveCount][0] = homeRow;
+        moves[moveCount][1] = 2;
         moveCount++;
       }
     }
@@ -324,10 +384,21 @@ bool ChessEngine::isSquareUnderAttack(const char board[8][8], int row, int col, 
       char pieceColor = getPieceColor(piece);
       if (pieceColor != attackingColor) continue;
 
+      // Pawns are special: their attack pattern differs from their move pattern.
+      char upperPiece = (piece >= 'a' && piece <= 'z') ? (piece - 32) : piece;
+      if (upperPiece == 'P') {
+        int direction = (pieceColor == 'w') ? -1 : 1;
+        if (r + direction == row && (c - 1 == col || c + 1 == col)) {
+          return true;
+        }
+        continue;
+      }
+
       // Get pseudo-legal moves for this enemy piece (no check filtering to avoid recursion)
       int moveCount = 0;
       int moves[28][2];
-      getPseudoLegalMoves(board, r, c, moveCount, moves);
+      // IMPORTANT: for attack detection, do NOT include castling moves
+      getPseudoLegalMoves(board, r, c, moveCount, moves, false);
 
       // Check if any of those moves target our square
       for (int i = 0; i < moveCount; i++) {
@@ -344,8 +415,35 @@ bool ChessEngine::isSquareUnderAttack(const char board[8][8], int row, int col, 
 // Make a temporary move on a board copy
 void ChessEngine::makeMove(char board[8][8], int fromRow, int fromCol, int toRow, int toCol, char& capturedPiece) {
   capturedPiece = board[toRow][toCol];
-  board[toRow][toCol] = board[fromRow][fromCol];
+  char movingPiece = board[fromRow][fromCol];
+
+  board[toRow][toCol] = movingPiece;
   board[fromRow][fromCol] = ' ';
+
+  // Handle castling as a compound move (move rook too)
+  char movingUpper = (movingPiece >= 'a' && movingPiece <= 'z') ? (movingPiece - 32) : movingPiece;
+  if (movingUpper == 'K' && fromRow == toRow) {
+    int deltaCol = toCol - fromCol;
+    if (deltaCol == 2) {
+      // King-side: rook h-file -> f-file
+      int rookFromCol = 7;
+      int rookToCol = 5;
+      char rookPiece = (movingPiece >= 'a' && movingPiece <= 'z') ? 'r' : 'R';
+      if (board[toRow][rookFromCol] == rookPiece) {
+        board[toRow][rookToCol] = rookPiece;
+        board[toRow][rookFromCol] = ' ';
+      }
+    } else if (deltaCol == -2) {
+      // Queen-side: rook a-file -> d-file
+      int rookFromCol = 0;
+      int rookToCol = 3;
+      char rookPiece = (movingPiece >= 'a' && movingPiece <= 'z') ? 'r' : 'R';
+      if (board[toRow][rookFromCol] == rookPiece) {
+        board[toRow][rookToCol] = rookPiece;
+        board[toRow][rookFromCol] = ' ';
+      }
+    }
+  }
 }
 
 // Check if a move would leave the king in check

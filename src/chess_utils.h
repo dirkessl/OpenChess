@@ -5,6 +5,10 @@
 
 class ChessUtils {
  public:
+  // Convert castling rights bitmask (KQkq) to string used in FEN.
+  // rights: bitmask where 0x01=K, 0x02=Q, 0x04=k, 0x08=q
+  static String castlingRightsToString(uint8_t rights);
+
   // Convert board state to FEN notation
   // board: 8x8 array representing the chess board
   // isWhiteTurn: true if it's white's turn to move

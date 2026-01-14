@@ -38,6 +38,8 @@ class BoardDriver {
   Adafruit_NeoPixel strip;
   bool sensorState[NUM_ROWS][NUM_COLS];
   bool sensorPrev[NUM_ROWS][NUM_COLS];
+  bool sensorRaw[NUM_ROWS][NUM_COLS];
+  unsigned long sensorDebounceTime[NUM_ROWS][NUM_COLS];
 
   void loadShiftRegister(byte data);
   void disableAllCols();
