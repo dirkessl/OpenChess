@@ -15,7 +15,7 @@ const char ChessMoves::INITIAL_BOARD[8][8] = {
     {'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'}  // row 7 = rank 1 (White pieces, bottom row)
 };
 
-ChessMoves::ChessMoves(BoardDriver* bd, ChessEngine* ce) : boardDriver(bd), chessEngine(ce);
+ChessMoves::ChessMoves(BoardDriver* bd, ChessEngine* ce) : boardDriver(bd), chessEngine(ce) {}
 
 void ChessMoves::begin() {
   Serial.println("Starting Chess Game Mode...");
