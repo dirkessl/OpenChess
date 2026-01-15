@@ -497,7 +497,7 @@ void BoardDriver::setSquareLED(int row, int col, uint8_t r, uint8_t g, uint8_t b
   uint32_t color;
   float multiplier = 1.0f;
   int pixelIndex = getPixelIndex(row, col);
-  if (pixelIndex % 2 == 0)
+  if ((row + col) % 2 == 1)
     multiplier = 0.7f; // Dim dark squares to 70% brightness because they appear brighter due to the contrast
   (w > 0 && ((r == 0 && g == 0 && b == 0) || (r == 255 && g == 255 && b == 255))) ? color = strip.Color(255 * multiplier, 255 * multiplier, 255 * multiplier) : color = strip.Color(r * multiplier, g * multiplier, b * multiplier);
   strip.setPixelColor(pixelIndex, color);
