@@ -1,10 +1,6 @@
 #ifndef WIFI_MANAGER_ESP32_H
 #define WIFI_MANAGER_ESP32_H
 
-#if !defined(ESP32) && !defined(ESP8266)
-#error "wifi_manager_esp32.h is only for ESP32/ESP8266 boards"
-#endif
-
 // Include Arduino.h first to set up ESP32 environment
 #include <Arduino.h>
 #include <Preferences.h>

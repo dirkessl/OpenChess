@@ -11,16 +11,10 @@
 // Forward declaration to avoid circular dependency
 class WiFiManagerESP32;
 
-// Platform-specific WiFi includes
-#if defined(ESP32) || defined(ESP8266)
-// ESP32/ESP8266 use built-in WiFi libraries
+// ESP32 WiFi includes
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #define WiFiSSLClient WiFiClientSecure
-#else
-// Other boards - WiFi not supported
-#warning "WiFi not supported on this board - Chess Bot will not work"
-#endif
 
 class ChessBot {
  private:

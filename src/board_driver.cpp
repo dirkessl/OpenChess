@@ -2,11 +2,8 @@
 #include "chess_utils.h"
 #include "led_colors.h"
 #include <Arduino.h>
-#include <math.h>
-
-#if defined(ESP32)
 #include <Preferences.h>
-#endif
+#include <math.h>
 
 static constexpr int rowPins[NUM_ROWS] = {ROW_PIN_0, ROW_PIN_1, ROW_PIN_2, ROW_PIN_3, ROW_PIN_4, ROW_PIN_5, ROW_PIN_6, ROW_PIN_7};
 // ---------------------------
@@ -68,7 +65,6 @@ void BoardDriver::begin() {
 }
 
 bool BoardDriver::loadCalibration() {
-#if defined(ESP32)
   if (!ChessUtils::ensureNvsInitialized()) {
     Serial.println("NVS init failed - calibration not loaded");
     return false;
@@ -124,13 +120,9 @@ bool BoardDriver::loadCalibration() {
   calibrationLoaded = true;
   Serial.println("Board calibration loaded from NVS");
   return true;
-#else
-  return false;
-#endif
 }
 
 void BoardDriver::saveCalibration() {
-#if defined(ESP32)
   if (!ChessUtils::ensureNvsInitialized()) {
     Serial.println("NVS init failed - calibration not saved");
     return;
@@ -158,7 +150,6 @@ void BoardDriver::saveCalibration() {
   prefs.end();
   calibrationLoaded = true;
   Serial.println("Board calibration saved to NVS");
-#endif
 }
 
 void BoardDriver::readRawSensors(bool rawState[NUM_ROWS][NUM_COLS]) {
@@ -354,7 +345,6 @@ bool BoardDriver::calibrateAxis(Axis axis, uint8_t* axisPinsOrder, size_t NUM_PI
 }
 
 void BoardDriver::runCalibration() {
-#if defined(ESP32)
   Serial.println("============== Board calibration required ==============");
   Serial.println("- Board needs to be empty to begin the calibration");
   Serial.println("- Follow the prompts to place a single piece");
@@ -426,9 +416,6 @@ void BoardDriver::runCalibration() {
 
   clearAllLEDs();
   Serial.println("Calibration complete");
-#else
-  Serial.println("Calibration skipped (non-ESP32 build)");
-#endif
 }
 
 void BoardDriver::loadShiftRegister(byte data) {

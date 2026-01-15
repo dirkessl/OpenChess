@@ -58,12 +58,15 @@ def gen():
 
     # ---------- web_pages.h ----------
     with PAGES_H.open("w", newline="\n") as f:
-        f.write("#pragma once\n")
+        f.write("#ifndef WEB_PAGES_H\n")
+        f.write("#define WEB_PAGES_H\n\n")
         f.write("#include <Arduino.h>\n\n")
 
         for p in pages:
             f.write(f"extern const uint8_t {p['symbol']}[];\n")
             f.write(f"extern const size_t {p['symbol']}_LEN;\n\n")
+        
+        f.write("#endif\n")
 
     # ---------- web_pages.cpp ----------
     with PAGES_CPP.open("w", newline="\n") as f:

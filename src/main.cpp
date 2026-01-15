@@ -4,16 +4,9 @@
 #include "chess_moves.h"
 #include "chess_utils.h"
 #include "sensor_test.h"
+#include "wifi_manager_esp32.h"
 
-// Uncomment the next line to enable WiFi features (requires compatible board)
-#define ENABLE_WIFI
-#ifdef ENABLE_WIFI
-// Use different WiFi manager based on board type
-#if defined(ESP32) || defined(ESP8266)
-#include "wifi_manager_esp32.h" // Full WiFi implementation for ESP32/ESP8266
 #define WiFiManager WiFiManagerESP32
-#endif
-#endif
 
 // ---------------------------
 // Game State and Configuration
@@ -32,9 +25,7 @@ BotConfig botConfig = {StockfishSettings::medium(), true};
 
 // Global instances
 BoardDriver boardDriver;
-#ifdef ENABLE_WIFI
 WiFiManager wifiManager(&boardDriver);
-#endif
 ChessEngine chessEngine;
 ChessMoves chessMoves(&boardDriver, &chessEngine);
 SensorTest sensorTest(&boardDriver);
@@ -76,64 +67,24 @@ void setup() {
   Serial.println("================================================");
   Serial.println("DEBUG: Serial communication established");
   Serial.printf("DEBUG: Millis since boot: %lu\n", millis());
-
-  // Debug board type detection
-  Serial.println("DEBUG: Board type detection:");
-#if defined(ESP32)
-  Serial.println("  - Detected: ESP32");
-#elif defined(ESP8266)
-  Serial.println("  - Detected: ESP8266");
-#elif defined(ARDUINO_SAMD_MKRWIFI1010)
-  Serial.println("  - Detected: ARDUINO_SAMD_MKRWIFI1010");
-#elif defined(ARDUINO_SAMD_NANO_33_IOT)
-  Serial.println("  - Detected: ARDUINO_SAMD_NANO_33_IOT");
-#elif defined(ARDUINO_NANO_RP2040_CONNECT)
-  Serial.println("  - Detected: ARDUINO_NANO_RP2040_CONNECT");
-#else
-  Serial.println("  - Detected: Unknown/Other board type");
-#endif
-
-  // Check which mode is compiled
-#ifdef ENABLE_WIFI
-  Serial.println("DEBUG: Compiled with ENABLE_WIFI defined");
-#else
-  Serial.println("DEBUG: Compiled without ENABLE_WIFI (local mode only)");
-#endif
-
-  Serial.println("DEBUG: About to initialize board driver...");
   if (!ChessUtils::ensureNvsInitialized())
     Serial.println("WARNING: NVS init failed (Preferences may not work)");
   // Initialize board driver
   boardDriver.begin();
   Serial.println("DEBUG: Board driver initialized successfully");
 
-#ifdef ENABLE_WIFI
-  Serial.println();
-  Serial.println("=== WiFi Mode Enabled ===");
-  Serial.println("DEBUG: About to initialize WiFi Manager...");
-  Serial.println("DEBUG: This will attempt to create Access Point");
-
   // Initialize WiFi Manager
   wifiManager.begin();
-
   Serial.println("DEBUG: WiFi Manager initialization completed");
-  Serial.println("If WiFi AP was created successfully, you should see:");
-  Serial.println("- Network name: OpenChessBoard");
+  Serial.println("A WiFi Access Point was created, connect to it using:");
+  Serial.println("- Network SSID: OpenChess");
   Serial.println("- Password: chess123");
   Serial.println("- Web interface: http://192.168.4.1");
-  Serial.println("Or place a piece on the board for local selection");
-#else
-  Serial.println();
-  Serial.println("=== Local Mode Only ===");
-  Serial.println("WiFi features are disabled in this build");
-  Serial.println("To enable WiFi: Uncomment #define ENABLE_WIFI and recompile");
-#endif
+  Serial.println("Configure WiFi credentials from the web interface to join your local WiFi network (Stockfish needs internet).");
+  Serial.println("The board will also attempt to connect to previously saved WiFi networks automatically.");
 
   Serial.println();
   Serial.println("=== Game Selection Mode ===");
-  Serial.println("DEBUG: About to show game selection LEDs...");
-
-  // Show game selection interface
   showGameSelection();
 
   Serial.println("DEBUG: Game selection LEDs should now be visible");
@@ -142,7 +93,7 @@ void setup() {
   Serial.println("Position 2 (3,4): Chess Bot (Human vs AI)");
   Serial.println("Position 3 (4,4): Sensor Test");
   Serial.println();
-  Serial.println("Place any chess piece on a white LED to select that mode");
+  Serial.println("Place any chess piece on a LED to select that mode");
   Serial.println("================================================");
   Serial.println("         Setup Complete - Entering Main Loop");
   Serial.println("================================================");
@@ -166,7 +117,6 @@ void loop() {
     lastDebugPrint = millis();
   }
 
-#ifdef ENABLE_WIFI
   // Check for pending board edits from WiFi
   char editBoard[8][8];
   if (wifiManager.getPendingBoardEdit(editBoard)) {
@@ -249,7 +199,6 @@ void loop() {
       }
     }
   }
-#endif
 
   if (currentMode == MODE_SELECTION) {
     handleGameSelection();
@@ -328,7 +277,7 @@ void handleGameSelection() {
     currentMode = MODE_SENSOR_TEST;
     modeInitialized = false;
     boardDriver.clearAllLEDs();
-    delay(500);
+    delay(250);
   }
 
   delay(100);

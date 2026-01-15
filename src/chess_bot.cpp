@@ -271,10 +271,8 @@ void ChessBot::update() {
 
 String ChessBot::makeStockfishRequest(String fen) {
   WiFiSSLClient client;
-#if defined(ESP32) || defined(ESP8266)
-  // ESP32/ESP8266: Set insecure mode for SSL (or add proper certificate validation)
+  // Set insecure mode for SSL (or add proper certificate validation)
   client.setInsecure();
-#endif
   String path = StockfishAPI::buildRequestURL(fen, botConfig.stockfishSettings.depth);
   Serial.println("Stockfish request: " STOCKFISH_API_URL + path);
   // Retry logic

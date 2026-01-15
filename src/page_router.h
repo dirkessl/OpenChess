@@ -1,3 +1,6 @@
+#ifndef PAGE_ROUTER_H
+#define PAGE_ROUTER_H
+
 #include <Arduino.h>
 
 struct Page {
@@ -9,3 +12,5 @@ struct Page {
 };
 
 const Page* findPage(const char* path);
+
+#endif

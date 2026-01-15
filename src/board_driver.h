@@ -11,11 +11,7 @@
 // WS2812B LED Data IN GPIO Pin
 // The strip doesn't need to have a specific layout, calibration will map it correctly
 // ---------------------------
-#if defined(ESP32)
 #define LED_PIN 32
-#else
-#define LED_PIN 17
-#endif
 #define NUM_ROWS 8
 #define NUM_COLS 8
 #define LED_COUNT (NUM_ROWS * NUM_COLS)
