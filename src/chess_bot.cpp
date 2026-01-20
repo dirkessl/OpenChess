@@ -7,9 +7,9 @@
 #include <Arduino.h>
 
 ChessBot::ChessBot(BoardDriver* boardDriver, ChessEngine* chessEngine, WiFiManagerESP32* wifiManager, BotConfig config) {
-  _boardDriver = boardDriver;
-  _chessEngine = chessEngine;
-  _wifiManager = wifiManager;
+  boardDriver = boardDriver;
+  chessEngine = chessEngine;
+  wifiManager = wifiManager;
   botConfig = config;
   isWhiteTurn = true;
   gameStarted = false;
@@ -26,25 +26,25 @@ void ChessBot::begin() {
   Serial.printf("Bot Difficulty: Depth %d, Timeout %dms\n", botConfig.stockfishSettings.depth, botConfig.stockfishSettings.timeoutMs);
   Serial.println("====================================");
 
-  _boardDriver->clearAllLEDs();
+  boardDriver->clearAllLEDs();
 
   // Connect to WiFi
-  if (_wifiManager->connectToWiFi(_wifiManager->getWiFiSSID(), _wifiManager->getWiFiPassword())) {
+  if (wifiManager->connectToWiFi(wifiManager->getWiFiSSID(), wifiManager->getWiFiPassword())) {
     Serial.println("WiFi connected! Bot mode ready.");
     wifiConnected = true;
 
     // Show success animation
     for (int i = 0; i < 3; i++) {
-      _boardDriver->clearAllLEDs();
+      boardDriver->clearAllLEDs();
       delay(200);
 
       // Light up entire board green briefly
       for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
-          _boardDriver->setSquareLED(row, col, LedColors::ConfirmGreen.r, LedColors::ConfirmGreen.g, LedColors::ConfirmGreen.b); // Green
+          boardDriver->setSquareLED(row, col, LedColors::ConfirmGreen.r, LedColors::ConfirmGreen.g, LedColors::ConfirmGreen.b); // Green
         }
       }
-      _boardDriver->showLEDs();
+      boardDriver->showLEDs();
       delay(200);
     }
 
@@ -61,20 +61,20 @@ void ChessBot::begin() {
 
     // Show error animation (red flashing)
     for (int i = 0; i < 5; i++) {
-      _boardDriver->clearAllLEDs();
+      boardDriver->clearAllLEDs();
       delay(300);
 
       // Light up entire board red briefly
       for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
-          _boardDriver->setSquareLED(row, col, LedColors::ErrorRed.r, LedColors::ErrorRed.g, LedColors::ErrorRed.b); // Red
+          boardDriver->setSquareLED(row, col, LedColors::ErrorRed.r, LedColors::ErrorRed.g, LedColors::ErrorRed.b); // Red
         }
       }
-      _boardDriver->showLEDs();
+      boardDriver->showLEDs();
       delay(300);
     }
 
-    _boardDriver->clearAllLEDs();
+    boardDriver->clearAllLEDs();
   }
 }
 
@@ -96,7 +96,7 @@ void ChessBot::update() {
     return;
   }
 
-  _boardDriver->readSensors();
+  boardDriver->readSensors();
 
   // Detect piece movements (player's turn)
   bool isPlayerTurn = (botConfig.playerIsWhite && isWhiteTurn) || (!botConfig.playerIsWhite && !isWhiteTurn);
@@ -114,7 +114,7 @@ void ChessBot::update() {
     if (!piecePickedUp) {
       for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
-          if (!_boardDriver->getSensorState(row, col) && _boardDriver->getSensorPrev(row, col)) {
+          if (!boardDriver->getSensorState(row, col) && boardDriver->getSensorPrev(row, col)) {
             // Check what piece was picked up
             char piece = board[row][col];
 
@@ -128,31 +128,31 @@ void ChessBot::update() {
                 Serial.printf("Player picked up %s piece '%c' at %c%d (array position %d,%d)\n", botConfig.playerIsWhite ? "WHITE" : "BLACK", board[row][col], (char)('a' + col), 8 - row, row, col);
 
                 // Show selected square
-                _boardDriver->setSquareLED(row, col, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
+                boardDriver->setSquareLED(row, col, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
 
                 // Show possible moves
                 int moveCount = 0;
                 int moves[27][2];
-                _chessEngine->setCastlingRights(castlingRights);
-                _chessEngine->getPossibleMoves(board, row, col, moveCount, moves);
+                chessEngine->setCastlingRights(castlingRights);
+                chessEngine->getPossibleMoves(board, row, col, moveCount, moves);
 
                 for (int i = 0; i < moveCount; i++) {
                   int r = moves[i][0];
                   int c = moves[i][1];
                   if (board[r][c] != ' ') {
-                    _boardDriver->setSquareLED(r, c, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
+                    boardDriver->setSquareLED(r, c, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
                   } else {
-                    _boardDriver->setSquareLED(r, c, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+                    boardDriver->setSquareLED(r, c, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
                   }
                 }
-                _boardDriver->showLEDs();
+                boardDriver->showLEDs();
                 break;
               } else {
                 // Player tried to pick up the wrong color piece
                 Serial.printf("ERROR: You tried to pick up %s piece '%c' at %c%d. You can only move %s pieces!\n", (piece >= 'A' && piece <= 'Z') ? "WHITE" : "BLACK", piece, (char)('a' + col), 8 - row, botConfig.playerIsWhite ? "WHITE" : "BLACK");
 
                 // Flash red to indicate error
-                _boardDriver->blinkSquare(row, col, LedColors::ErrorRed.r, LedColors::ErrorRed.g, LedColors::ErrorRed.b); // Blink red
+                boardDriver->blinkSquare(row, col, LedColors::ErrorRed.r, LedColors::ErrorRed.g, LedColors::ErrorRed.b); // Blink red
               }
             }
           }
@@ -166,7 +166,7 @@ void ChessBot::update() {
     if (piecePickedUp) {
       for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
-          if (_boardDriver->getSensorState(row, col) && !_boardDriver->getSensorPrev(row, col)) {
+          if (boardDriver->getSensorState(row, col) && !boardDriver->getSensorPrev(row, col)) {
             // Check if piece was returned to its original position
             if (row == selectedRow && col == selectedCol) {
               // Piece returned to original position - cancel selection
@@ -175,15 +175,15 @@ void ChessBot::update() {
               selectedRow = selectedCol = -1;
 
               // Clear all indicators
-              _boardDriver->clearAllLEDs();
+              boardDriver->clearAllLEDs();
               break;
             }
 
             // Piece placed somewhere else - validate move
             int moveCount = 0;
             int moves[27][2];
-            _chessEngine->setCastlingRights(castlingRights);
-            _chessEngine->getPossibleMoves(board, selectedRow, selectedCol, moveCount, moves);
+            chessEngine->setCastlingRights(castlingRights);
+            chessEngine->getPossibleMoves(board, selectedRow, selectedCol, moveCount, moves);
 
             bool validMove = false;
             for (int i = 0; i < moveCount; i++) {
@@ -202,12 +202,12 @@ void ChessBot::update() {
               // Immediately publish the player's move to the web UI.
               // The main loop may be blocked while the bot thinks/moves, so relying on polling there
               // can delay UI updates.
-              if (_wifiManager) {
-                _wifiManager->updateBoardState(board, currentEvaluation);
+              if (wifiManager) {
+                wifiManager->updateBoardState(board, currentEvaluation);
               }
 
               // Flash confirmation on destination square for player move
-              ChessCommon::confirmSquareCompletion(_boardDriver, row, col);
+              ChessCommon::confirmSquareCompletion(boardDriver, row, col);
 
               piecePickedUp = false;
               selectedRow = selectedCol = -1;
@@ -219,7 +219,7 @@ void ChessBot::update() {
 
               // After the player's move, check if the bot is checkmated/stalemated (or in check).
               char sideToMove = isWhiteTurn ? 'w' : 'b';
-              gameOver = ChessCommon::handleGameState(_boardDriver, _chessEngine, board, sideToMove);
+              gameOver = ChessCommon::handleGameState(boardDriver, chessEngine, board, sideToMove);
 
               if (!gameOver) {
                 botThinking = true;
@@ -229,30 +229,30 @@ void ChessBot::update() {
               }
             } else {
               Serial.println("Invalid move! Please try again.");
-              _boardDriver->blinkSquare(row, col, LedColors::ErrorRed.r, LedColors::ErrorRed.g, LedColors::ErrorRed.b); // Blink red for invalid move
+              boardDriver->blinkSquare(row, col, LedColors::ErrorRed.r, LedColors::ErrorRed.g, LedColors::ErrorRed.b); // Blink red for invalid move
 
               // Restore move indicators - piece is still selected
-              _boardDriver->clearAllLEDs();
+              boardDriver->clearAllLEDs();
 
               // Show selected square again
-              _boardDriver->setSquareLED(selectedRow, selectedCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
+              boardDriver->setSquareLED(selectedRow, selectedCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
 
               // Show possible moves again
               int moveCount = 0;
               int moves[27][2];
-              _chessEngine->setCastlingRights(castlingRights);
-              _chessEngine->getPossibleMoves(board, selectedRow, selectedCol, moveCount, moves);
+              chessEngine->setCastlingRights(castlingRights);
+              chessEngine->getPossibleMoves(board, selectedRow, selectedCol, moveCount, moves);
 
               for (int i = 0; i < moveCount; i++) {
                 int r = moves[i][0];
                 int c = moves[i][1];
                 if (board[r][c] != ' ') {
-                  _boardDriver->setSquareLED(r, c, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
+                  boardDriver->setSquareLED(r, c, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
                 } else {
-                  _boardDriver->setSquareLED(r, c, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+                  boardDriver->setSquareLED(r, c, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
                 }
               }
-              _boardDriver->showLEDs();
+              boardDriver->showLEDs();
 
               Serial.println("Piece is still selected. Place it on a valid move or return it to its original position.");
             }
@@ -266,7 +266,7 @@ void ChessBot::update() {
     makeBotMove();
   }
 
-  _boardDriver->updateSensorPrev();
+  boardDriver->updateSensorPrev();
 }
 
 String ChessBot::makeStockfishRequest(String fen) {
@@ -368,7 +368,7 @@ void ChessBot::makeBotMove() {
       // After the bot's move, check if the player is checkmated/stalemated (or in check).
       {
         char sideToMove = isWhiteTurn ? 'w' : 'b';
-        gameOver = ChessCommon::handleGameState(_boardDriver, _chessEngine, board, sideToMove);
+        gameOver = ChessCommon::handleGameState(boardDriver, chessEngine, board, sideToMove);
       }
 
       if (!gameOver) {
@@ -391,10 +391,10 @@ void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
   board[fromRow][fromCol] = ' ';
 
   if (castling)
-    ChessCommon::applyCastling(_boardDriver, board, fromRow, fromCol, toRow, toCol, piece);
+    ChessCommon::applyCastling(boardDriver, board, fromRow, fromCol, toRow, toCol, piece);
 
   ChessCommon::updateCastlingRightsAfterMove(castlingRights, fromRow, fromCol, toRow, toCol, piece, capturedPiece);
-  _chessEngine->setCastlingRights(castlingRights);
+  chessEngine->setCastlingRights(castlingRights);
 
   if (!castling) {
     Serial.printf("Bot wants to move piece from %c%d to %c%d\nPlease make this move on the physical board...\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow);
@@ -408,30 +408,25 @@ void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
     waitForBotMoveCompletion(fromRow, fromCol, toRow, toCol, isCapture);
 
     // Clear LEDs after move completion
-    _boardDriver->clearAllLEDs();
+    boardDriver->clearAllLEDs();
   } else {
     int rookFromCol = ((toCol - fromCol) == 2) ? 7 : 0;
     int rookToCol = ((toCol - fromCol) == 2) ? 5 : 3;
-    Serial.printf("Bot wants to castle: move king %c%d -> %c%d and rook %c%d -> %c%d\nPlease make this move on the physical board...\n",
-                  (char)('a' + fromCol), 8 - fromRow,
-                  (char)('a' + toCol), 8 - toRow,
-                  (char)('a' + rookFromCol), 8 - fromRow,
-                  (char)('a' + rookToCol), 8 - toRow);
-
+    Serial.printf("Bot wants to castle: move king %c%d -> %c%d and rook %c%d -> %c%d\nPlease make this move on the physical board...\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow, (char)('a' + rookFromCol), 8 - fromRow, (char)('a' + rookToCol), 8 - toRow);
     waitForBotCastlingCompletion(fromRow, fromCol, toRow, toCol);
   }
 
   if (capturedPiece != ' ') {
     Serial.printf("Piece captured: %c\n", capturedPiece);
-    _boardDriver->captureAnimation();
+    boardDriver->captureAnimation();
   }
 
   // Flash confirmation on the destination square
-  ChessCommon::confirmSquareCompletion(_boardDriver, toRow, toCol);
+  ChessCommon::confirmSquareCompletion(boardDriver, toRow, toCol);
 
   // Publish the bot move only after the physical move is completed.
-  if (_wifiManager) {
-    _wifiManager->updateBoardState(board, currentEvaluation);
+  if (wifiManager) {
+    wifiManager->updateBoardState(board, currentEvaluation);
   }
 
   Serial.println("Bot move completed. Your turn!");
@@ -439,33 +434,33 @@ void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
 
 void ChessBot::showBotThinking() {
   LedRGB thinkingColor = isWhiteTurn ? LedColors::BotThinkingWhite : LedColors::BotThinkingBlack;
-  _boardDriver->clearAllLEDs();
+  boardDriver->clearAllLEDs();
   // Corner LEDs blue if bot is Black, green/blue if bot is White
-  _boardDriver->setSquareLED(0, 0, thinkingColor.r, thinkingColor.g, thinkingColor.b);
-  _boardDriver->setSquareLED(0, 7, thinkingColor.r, thinkingColor.g, thinkingColor.b);
-  _boardDriver->setSquareLED(7, 0, thinkingColor.r, thinkingColor.g, thinkingColor.b);
-  _boardDriver->setSquareLED(7, 7, thinkingColor.r, thinkingColor.g, thinkingColor.b);
-  _boardDriver->showLEDs();
+  boardDriver->setSquareLED(0, 0, thinkingColor.r, thinkingColor.g, thinkingColor.b);
+  boardDriver->setSquareLED(0, 7, thinkingColor.r, thinkingColor.g, thinkingColor.b);
+  boardDriver->setSquareLED(7, 0, thinkingColor.r, thinkingColor.g, thinkingColor.b);
+  boardDriver->setSquareLED(7, 7, thinkingColor.r, thinkingColor.g, thinkingColor.b);
+  boardDriver->showLEDs();
 }
 
 void ChessBot::initializeBoard() {
   ChessCommon::copyBoard(INITIAL_BOARD, board);
   castlingRights = 0x0F;
-  _chessEngine->setCastlingRights(castlingRights);
+  chessEngine->setCastlingRights(castlingRights);
 }
 
 void ChessBot::waitForBoardSetup() {
   Serial.println("Please set up the chess board in starting position...");
 
-  while (!_boardDriver->checkInitialBoard(INITIAL_BOARD)) {
-    _boardDriver->readSensors();
-    _boardDriver->updateSetupDisplay(INITIAL_BOARD);
-    _boardDriver->showLEDs();
+  while (!boardDriver->checkInitialBoard(INITIAL_BOARD)) {
+    boardDriver->readSensors();
+    boardDriver->updateSetupDisplay(INITIAL_BOARD);
+    boardDriver->showLEDs();
     delay(100);
   }
 
   Serial.println("Board setup complete! Game starting...");
-  _boardDriver->fireworkAnimation();
+  boardDriver->fireworkAnimation();
   gameStarted = true;
 
   // Show initial board state
@@ -481,41 +476,41 @@ void ChessBot::processPlayerMove(int fromRow, int fromCol, int toRow, int toCol,
   board[fromRow][fromCol] = ' ';
 
   if (castling)
-    ChessCommon::applyCastling(_boardDriver, board, fromRow, fromCol, toRow, toCol, piece);
+    ChessCommon::applyCastling(boardDriver, board, fromRow, fromCol, toRow, toCol, piece);
 
   ChessCommon::updateCastlingRightsAfterMove(castlingRights, fromRow, fromCol, toRow, toCol, piece, capturedPiece);
-  _chessEngine->setCastlingRights(castlingRights);
+  chessEngine->setCastlingRights(castlingRights);
 
   Serial.printf("Player moved %c from %c%d to %c%d\n", piece, (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow);
 
   if (capturedPiece != ' ') {
     Serial.printf("Captured %c\n", capturedPiece);
-    _boardDriver->captureAnimation();
+    boardDriver->captureAnimation();
   }
 
   // Check for pawn promotion
   char promotedPiece = ' ';
-  if (ChessCommon::applyPawnPromotionIfNeeded(_chessEngine, board, toRow, toCol, piece, promotedPiece)) {
+  if (ChessCommon::applyPawnPromotionIfNeeded(chessEngine, board, toRow, toCol, piece, promotedPiece)) {
     Serial.printf("Pawn promoted to %c\n", promotedPiece);
-    _boardDriver->promotionAnimation(toCol);
+    boardDriver->promotionAnimation(toCol);
   }
 }
 
 void ChessBot::showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toCol, bool isCapture) {
   // Clear all LEDs first
-  _boardDriver->clearAllLEDs();
+  boardDriver->clearAllLEDs();
 
   // Show source square (where to pick up from)
-  _boardDriver->setSquareLED(fromRow, fromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
+  boardDriver->setSquareLED(fromRow, fromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
 
   // Show destination square (where to place)
   if (isCapture) {
-    _boardDriver->setSquareLED(toRow, toCol, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
+    boardDriver->setSquareLED(toRow, toCol, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
   } else {
-    _boardDriver->setSquareLED(toRow, toCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+    boardDriver->setSquareLED(toRow, toCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
   }
 
-  _boardDriver->showLEDs();
+  boardDriver->showLEDs();
 }
 
 void ChessBot::waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int toCol, bool isCapture) {
@@ -526,28 +521,28 @@ void ChessBot::waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int
   Serial.println("Waiting for you to complete the bot's move...");
 
   // Set LEDs once at the beginning to avoid flickering
-  _boardDriver->clearAllLEDs();
-  _boardDriver->setSquareLED(fromRow, fromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
+  boardDriver->clearAllLEDs();
+  boardDriver->setSquareLED(fromRow, fromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
   if (isCapture) {
-    _boardDriver->setSquareLED(toRow, toCol, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
+    boardDriver->setSquareLED(toRow, toCol, LedColors::AttackRed.r, LedColors::AttackRed.g, LedColors::AttackRed.b);
   } else {
-    _boardDriver->setSquareLED(toRow, toCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+    boardDriver->setSquareLED(toRow, toCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
   }
-  _boardDriver->showLEDs();
+  boardDriver->showLEDs();
 
   while (!moveCompleted) {
-    _boardDriver->readSensors();
+    boardDriver->readSensors();
 
     // For capture moves, ensure captured piece is removed first
     if (isCapture && !capturedPieceRemoved) {
-      if (!_boardDriver->getSensorState(toRow, toCol)) {
+      if (!boardDriver->getSensorState(toRow, toCol)) {
         capturedPieceRemoved = true;
         Serial.println("Captured piece removed, now complete the bot's move...");
       }
     }
 
     // Check if piece was picked up from source
-    if (!piecePickedUp && !_boardDriver->getSensorState(fromRow, fromCol)) {
+    if (!piecePickedUp && !boardDriver->getSensorState(fromRow, fromCol)) {
       piecePickedUp = true;
       Serial.println("Bot piece picked up, now place it on the destination...");
     }
@@ -555,7 +550,7 @@ void ChessBot::waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int
     // Check if piece was placed on destination
     // For captures: wait until captured piece is removed AND bot piece is placed
     // For normal moves: just wait for bot piece to be placed
-    if (piecePickedUp && _boardDriver->getSensorState(toRow, toCol)) {
+    if (piecePickedUp && boardDriver->getSensorState(toRow, toCol)) {
       if (!isCapture || (isCapture && capturedPieceRemoved)) {
         moveCompleted = true;
         Serial.println("Bot move completed on physical board!");
@@ -563,7 +558,7 @@ void ChessBot::waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int
     }
 
     delay(50);
-    _boardDriver->updateSensorPrev();
+    boardDriver->updateSensorPrev();
   }
 }
 
@@ -575,12 +570,12 @@ void ChessBot::waitForBotCastlingCompletion(int kingFromRow, int kingFromCol, in
   Serial.println("Waiting for you to complete the bot's castling move...");
 
   // Set LEDs once at the beginning to avoid flickering
-  _boardDriver->clearAllLEDs();
-  _boardDriver->setSquareLED(kingFromRow, kingFromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
-  _boardDriver->setSquareLED(kingFromRow, rookFromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
-  _boardDriver->setSquareLED(kingToRow, kingToCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
-  _boardDriver->setSquareLED(kingToRow, rookToCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
-  _boardDriver->showLEDs();
+  boardDriver->clearAllLEDs();
+  boardDriver->setSquareLED(kingFromRow, kingFromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
+  boardDriver->setSquareLED(kingFromRow, rookFromCol, LedColors::PickupCyan.r, LedColors::PickupCyan.g, LedColors::PickupCyan.b);
+  boardDriver->setSquareLED(kingToRow, kingToCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+  boardDriver->setSquareLED(kingToRow, rookToCol, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b);
+  boardDriver->showLEDs();
 
   bool kingSourceEmpty = false;
   bool rookSourceEmpty = false;
@@ -588,17 +583,17 @@ void ChessBot::waitForBotCastlingCompletion(int kingFromRow, int kingFromCol, in
   bool rookDestOccupied = false;
 
   while (!(kingSourceEmpty && rookSourceEmpty && kingDestOccupied && rookDestOccupied)) {
-    _boardDriver->readSensors();
+    boardDriver->readSensors();
 
-    kingSourceEmpty = !_boardDriver->getSensorState(kingFromRow, kingFromCol);
-    rookSourceEmpty = !_boardDriver->getSensorState(kingFromRow, rookFromCol);
-    kingDestOccupied = _boardDriver->getSensorState(kingToRow, kingToCol);
-    rookDestOccupied = _boardDriver->getSensorState(kingToRow, rookToCol);
+    kingSourceEmpty = !boardDriver->getSensorState(kingFromRow, kingFromCol);
+    rookSourceEmpty = !boardDriver->getSensorState(kingFromRow, rookFromCol);
+    kingDestOccupied = boardDriver->getSensorState(kingToRow, kingToCol);
+    rookDestOccupied = boardDriver->getSensorState(kingToRow, rookToCol);
 
     delay(10);
   }
 
-  _boardDriver->clearAllLEDs();
+  boardDriver->clearAllLEDs();
 }
 
 void ChessBot::getBoardState(char boardState[8][8]) {
@@ -609,9 +604,9 @@ void ChessBot::setBoardState(char newBoardState[8][8]) {
   Serial.println("Board state updated via WiFi edit");
   ChessCommon::copyBoard(newBoardState, board);
   castlingRights = ChessCommon::recomputeCastlingRightsFromBoard(board);
-  _chessEngine->setCastlingRights(castlingRights);
+  chessEngine->setCastlingRights(castlingRights);
   // Update sensor previous state to match new board
-  _boardDriver->readSensors();
-  _boardDriver->updateSensorPrev();
+  boardDriver->readSensors();
+  boardDriver->updateSensorPrev();
   ChessUtils::printBoard(board);
 }

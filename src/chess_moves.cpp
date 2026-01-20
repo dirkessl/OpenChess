@@ -31,9 +31,6 @@ void ChessMoves::begin() {
 void ChessMoves::update() {
   boardDriver->readSensors();
 
-  static constexpr unsigned long kPlacementDebounceMs = 200; // require stable contact before accepting placement
-  static constexpr unsigned long kPlacementPollDelayMs = 20;
-
   // Look for a piece pickup
   for (int row = 0; row < 8; row++) {
     for (int col = 0; col < 8; col++) {
@@ -85,40 +82,16 @@ void ChessMoves::update() {
         bool piecePlaced = false;
         bool captureInProgress = false;
 
-        int pendingRow = -1;
-        int pendingCol = -1;
-        unsigned long pendingSinceMs = 0;
-
         // Wait for a piece placement on any square
         while (!piecePlaced) {
           boardDriver->readSensors();
 
-          // Debounce: if a candidate square is briefly touched (e.g., sliding a pawn across squares),
-          // don’t commit the move until the sensor stays occupied for kPlacementDebounceMs.
-          if (pendingRow != -1) {
-            if (boardDriver->getSensorState(pendingRow, pendingCol)) {
-              if (millis() - pendingSinceMs >= kPlacementDebounceMs) {
-                targetRow = pendingRow;
-                targetCol = pendingCol;
-                piecePlaced = true;
-                break;
-              }
-            } else {
-              pendingRow = -1;
-              pendingCol = -1;
-              pendingSinceMs = 0;
-            }
-            delay(kPlacementPollDelayMs);
-            continue;
-          }
-
           // First check if the original piece was placed back
           if (boardDriver->getSensorState(row, col)) {
-            pendingRow = row;
-            pendingCol = col;
-            pendingSinceMs = millis();
-            delay(kPlacementPollDelayMs);
-            continue;
+            targetRow = row;
+            targetCol = col;
+            piecePlaced = true;
+            break;
           }
 
           // Then check all squares for a regular move or capture initiation
@@ -155,31 +128,19 @@ void ChessMoves::update() {
                 boardDriver->showLEDs();
 
                 // Wait for the capturing piece to be placed
-                bool capturePiecePlaced = false;
-                unsigned long capturePlaceSinceMs = 0;
-                while (!capturePiecePlaced) {
+                while (!boardDriver->getSensorState(r2, c2)) {
                   boardDriver->readSensors();
-                  if (boardDriver->getSensorState(r2, c2)) {
-                    if (capturePlaceSinceMs == 0) {
-                      capturePlaceSinceMs = millis();
-                    } else if (millis() - capturePlaceSinceMs >= kPlacementDebounceMs) {
-                      capturePiecePlaced = true;
-                      piecePlaced = true;
-                      break;
-                    }
-                  } else {
-                    capturePlaceSinceMs = 0;
-                  }
-                  delay(kPlacementPollDelayMs);
+                  delay(50);
                 }
+                piecePlaced = true;
                 break;
               }
 
               // For normal non-capture moves: detect when a piece is placed on an empty square
               else if (board[r2][c2] == ' ' && boardDriver->getSensorState(r2, c2)) {
-                pendingRow = r2;
-                pendingCol = c2;
-                pendingSinceMs = millis();
+                targetRow = r2;
+                targetCol = c2;
+                piecePlaced = true;
                 break;
               }
             }
@@ -187,7 +148,7 @@ void ChessMoves::update() {
               break;
           }
 
-          delay(kPlacementPollDelayMs);
+          delay(50);
         }
 
         // Check if piece is replaced in the original spot

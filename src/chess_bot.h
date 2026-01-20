@@ -18,9 +18,9 @@ class WiFiManagerESP32;
 
 class ChessBot {
  private:
-  BoardDriver* _boardDriver;
-  ChessEngine* _chessEngine;
-  WiFiManagerESP32* _wifiManager;
+  BoardDriver* boardDriver;
+  ChessEngine* chessEngine;
+  WiFiManagerESP32* wifiManager;
 
   char board[8][8];
   const char INITIAL_BOARD[8][8] = {
