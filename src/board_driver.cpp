@@ -27,11 +27,9 @@ BoardDriver::BoardDriver() : strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800) {
     toLogicalRow[i] = i;
   for (int i = 0; i < NUM_COLS; i++)
     toLogicalCol[i] = i;
-  for (int row = 0; row < NUM_ROWS; row++) {
-    for (int col = 0; col < NUM_COLS; col++) {
+  for (int row = 0; row < NUM_ROWS; row++)
+    for (int col = 0; col < NUM_COLS; col++)
       ledIndexMap[row][col] = DefaultRowColToLEDindexMap[row][col];
-    }
-  }
 }
 
 void BoardDriver::begin() {
@@ -48,14 +46,13 @@ void BoardDriver::begin() {
   for (int c = 0; c < NUM_ROWS; c++)
     pinMode(rowPins[c], INPUT);
   // Initialize sensor arrays
-  for (int row = 0; row < NUM_ROWS; row++) {
+  for (int row = 0; row < NUM_ROWS; row++)
     for (int col = 0; col < NUM_COLS; col++) {
       sensorState[row][col] = false;
       sensorPrev[row][col] = false;
       sensorRaw[row][col] = false;
       sensorDebounceTime[row][col] = 0;
     }
-  }
 
   // Load calibration or run first-time calibration
   if (!loadCalibration()) {
@@ -85,12 +82,11 @@ bool BoardDriver::loadCalibration() {
   }
   uint8_t savedRowPins[NUM_ROWS];
   prefs.getBytes("rowPins", savedRowPins, sizeof(savedRowPins));
-  for (int i = 0; i < NUM_ROWS; i++) {
+  for (int i = 0; i < NUM_ROWS; i++)
     if (savedRowPins[i] != (uint8_t)rowPins[i]) {
       prefs.end();
       return false;
     }
-  }
   uint8_t savedSRPins[3];
   prefs.getBytes("srPins", savedSRPins, sizeof(savedSRPins));
   if (savedSRPins[0] != (uint8_t)SR_CLK_PIN || savedSRPins[1] != (uint8_t)SR_LATCH_PIN || savedSRPins[2] != (uint8_t)SR_SER_DATA_PIN) {
@@ -111,11 +107,9 @@ bool BoardDriver::loadCalibration() {
   uint8_t ledFlat[LED_COUNT];
   prefs.getBytes("led", ledFlat, LED_COUNT);
   int idx = 0;
-  for (int row = 0; row < NUM_ROWS; row++) {
-    for (int col = 0; col < NUM_COLS; col++) {
+  for (int row = 0; row < NUM_ROWS; row++)
+    for (int col = 0; col < NUM_COLS; col++)
       ledIndexMap[row][col] = ledFlat[idx++];
-    }
-  }
   prefs.end();
   calibrationLoaded = true;
   Serial.println("Board calibration loaded from NVS");
@@ -141,11 +135,9 @@ void BoardDriver::saveCalibration() {
   prefs.putBytes("col", toLogicalCol, NUM_COLS);
   uint8_t ledFlat[LED_COUNT];
   int idx = 0;
-  for (int row = 0; row < NUM_ROWS; row++) {
-    for (int col = 0; col < NUM_COLS; col++) {
+  for (int row = 0; row < NUM_ROWS; row++)
+    for (int col = 0; col < NUM_COLS; col++)
       ledFlat[idx++] = ledIndexMap[row][col];
-    }
-  }
   prefs.putBytes("led", ledFlat, LED_COUNT);
   prefs.end();
   calibrationLoaded = true;
@@ -159,9 +151,8 @@ void BoardDriver::readRawSensors(bool rawState[NUM_ROWS][NUM_COLS]) {
 
   for (int col = 0; col < NUM_COLS; col++) {
     enableCol(col);
-    for (int row = 0; row < NUM_ROWS; row++) {
+    for (int row = 0; row < NUM_ROWS; row++)
       rawState[row][col] = (digitalRead(rowPins[row]) == LOW);
-    }
   }
   disableAllCols();
 }
@@ -172,12 +163,11 @@ bool BoardDriver::waitForBoardEmpty() {
     readRawSensors(rawState);
     bool any = false;
     for (int row = 0; row < NUM_ROWS; row++) {
-      for (int col = 0; col < NUM_COLS; col++) {
+      for (int col = 0; col < NUM_COLS; col++)
         if (rawState[row][col]) {
           any = true;
           break;
         }
-      }
       if (any)
         break;
     }
@@ -198,15 +188,13 @@ bool BoardDriver::waitForSingleRawPress(int& rawRow, int& rawCol, unsigned long 
     int count = 0;
     int foundRow = -1;
     int foundCol = -1;
-    for (int row = 0; row < NUM_ROWS; row++) {
-      for (int col = 0; col < NUM_COLS; col++) {
+    for (int row = 0; row < NUM_ROWS; row++)
+      for (int col = 0; col < NUM_COLS; col++)
         if (rawState[row][col]) {
           count++;
           foundRow = row;
           foundCol = col;
         }
-      }
-    }
     if (count == 1) {
       if (foundRow == lastRow && foundCol == lastCol) {
         if (stableStart == 0)
@@ -253,16 +241,14 @@ bool BoardDriver::calibrateAxis(Axis axis, uint8_t* axisPinsOrder, size_t NUM_PI
   // If this is column calibration and we already have row mapping, find expected raw row/col for rank 1
   int expectedRawPin = -1;
   bool useRow = true; // Whether to check row or col during column calibration
-  if (axis == ColsAxis) {
-    for (int i = 0; i < NUM_ROWS; i++) {
+  if (axis == ColsAxis)
+    for (int i = 0; i < NUM_ROWS; i++)
       if (toLogicalRow[i] == 7) {
         expectedRawPin = i;
         // If first axis swapped, toLogicalRow is indexed by raw cols, so we check col
         useRow = !firstAxisSwapped;
         break;
       }
-    }
-  }
 
   for (int i = 0; i < NUM_PINS; i++) {
     char square[3];
@@ -477,10 +463,9 @@ bool BoardDriver::getSensorPrev(int row, int col) {
 }
 
 void BoardDriver::updateSensorPrev() {
-  for (int row = 0; row < NUM_ROWS; row++) {
+  for (int row = 0; row < NUM_ROWS; row++)
     for (int col = 0; col < NUM_COLS; col++)
       sensorPrev[row][col] = sensorState[row][col];
-  }
 }
 
 int BoardDriver::getPixelIndex(int row, int col) {
@@ -510,8 +495,8 @@ void BoardDriver::showLEDs() {
 void BoardDriver::showConnectingAnimation() {
   // Show each WiFi connection attempt with animated LEDs
   for (int i = 0; i < 8; i++) {
-    setSquareLED(3, i, LedColors::BotThinkingBlack.r, LedColors::BotThinkingBlack.g, LedColors::BotThinkingBlack.b);
-    setSquareLED(4, i, LedColors::BotThinkingBlack.r, LedColors::BotThinkingBlack.g, LedColors::BotThinkingBlack.b);
+    setSquareLED(3, i, LedColors::BotThinking.r, LedColors::BotThinking.g, LedColors::BotThinking.b);
+    setSquareLED(4, i, LedColors::BotThinking.r, LedColors::BotThinking.g, LedColors::BotThinking.b);
     showLEDs();
     delay(100);
   }
@@ -535,7 +520,7 @@ void BoardDriver::fireworkAnimation() {
 
   // Expansion phase:
   for (float radius = 0; radius < 6; radius += 0.5) {
-    for (int row = 0; row < 8; row++) {
+    for (int row = 0; row < 8; row++)
       for (int col = 0; col < 8; col++) {
         float dx = col - centerX;
         float dy = row - centerY;
@@ -546,14 +531,13 @@ void BoardDriver::fireworkAnimation() {
         else
           strip.setPixelColor(pixelIndex, 0);
       }
-    }
     strip.show();
     delay(100);
   }
 
   // Contraction phase:
   for (float radius = 6; radius > 0; radius -= 0.5) {
-    for (int row = 0; row < 8; row++) {
+    for (int row = 0; row < 8; row++)
       for (int col = 0; col < 8; col++) {
         float dx = col - centerX;
         float dy = row - centerY;
@@ -564,14 +548,13 @@ void BoardDriver::fireworkAnimation() {
         else
           strip.setPixelColor(pixelIndex, 0);
       }
-    }
     strip.show();
     delay(100);
   }
 
   // Second expansion phase:
   for (float radius = 0; radius < 6; radius += 0.5) {
-    for (int row = 0; row < 8; row++) {
+    for (int row = 0; row < 8; row++)
       for (int col = 0; col < 8; col++) {
         float dx = col - centerX;
         float dy = row - centerY;
@@ -582,7 +565,6 @@ void BoardDriver::fireworkAnimation() {
         else
           strip.setPixelColor(pixelIndex, 0);
       }
-    }
     strip.show();
     delay(100);
   }
@@ -597,7 +579,7 @@ void BoardDriver::captureAnimation() {
 
   // Pulsing outward animation
   for (int pulse = 0; pulse < 3; pulse++) {
-    for (int row = 0; row < 8; row++) {
+    for (int row = 0; row < 8; row++)
       for (int col = 0; col < 8; col++) {
         float dx = col - centerX;
         float dy = row - centerY;
@@ -617,7 +599,6 @@ void BoardDriver::captureAnimation() {
           strip.setPixelColor(pixelIndex, 0);
         }
       }
-    }
     strip.show();
     delay(150);
   }
@@ -633,11 +614,10 @@ void BoardDriver::promotionAnimation(int col) {
       int pixelIndex = getPixelIndex(row, col);
 
       // Create a golden wave moving up and down the column
-      if ((step + row) % 8 < 4) {
+      if ((step + row) % 8 < 4)
         strip.setPixelColor(pixelIndex, strip.Color(LedColors::Gold.r, LedColors::Gold.g, LedColors::Gold.b));
-      } else {
+      else
         strip.setPixelColor(pixelIndex, 0);
-      }
     }
     strip.show();
     delay(100);
@@ -651,42 +631,50 @@ void BoardDriver::promotionAnimation(int col) {
   strip.show();
 }
 
+void BoardDriver::flashBoardAnimation(uint8_t r, uint8_t g, uint8_t b) {
+  for (int i = 0; i < 3; i++) {
+    clearAllLEDs();
+    delay(200);
+    // Light up entire board with specified color
+    for (int row = 0; row < 8; row++)
+      for (int col = 0; col < 8; col++)
+        setSquareLED(row, col, r, g, b);
+    showLEDs();
+    delay(200);
+  }
+  clearAllLEDs();
+}
+
 bool BoardDriver::checkInitialBoard(const char initialBoard[8][8]) {
   readSensors();
   bool allPresent = true;
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
-      if (initialBoard[row][col] != ' ' && !sensorState[row][col]) {
+  for (int row = 0; row < 8; row++)
+    for (int col = 0; col < 8; col++)
+      if (initialBoard[row][col] != ' ' && !sensorState[row][col])
         allPresent = false;
-      }
-    }
-  }
   return allPresent;
 }
 
-void BoardDriver::updateSetupDisplay(const char initialBoard[8][8]) {
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
+void BoardDriver::updateSetupDisplay() {
+  for (int row = 0; row < 8; row++)
+    for (int col = 0; col < 8; col++)
       // Check if a piece is detected on this square
       if (sensorState[row][col]) {
         // Piece detected
-        if (row <= 1 || row >= 6) {
+        if (row <= 1 || row >= 6)
           // Black or white side - turn off LED (piece is in correct area)
           setSquareLED(row, col, LedColors::Off.r, LedColors::Off.g, LedColors::Off.b);
-        } else {
+        else
           // Middle rows - show error (piece shouldn't be here)
           setSquareLED(row, col, LedColors::ErrorRed.r, LedColors::ErrorRed.g, LedColors::ErrorRed.b);
-        }
       } else {
         // No piece detected - show where pieces should be placed
         if (row <= 1)
-          setSquareLED(row, col, LedColors::BotThinkingBlack.r, LedColors::BotThinkingBlack.g, LedColors::BotThinkingBlack.b); // Black side
+          setSquareLED(row, col, LedColors::BotThinking.r, LedColors::BotThinking.g, LedColors::BotThinking.b); // Black side
         else if (row >= 6)
           setSquareLED(row, col, LedColors::MoveWhite.r, LedColors::MoveWhite.g, LedColors::MoveWhite.b); // White side
         else
           setSquareLED(row, col, LedColors::Off.r, LedColors::Off.g, LedColors::Off.b); // Middle rows - turn off
       }
-    }
-  }
   strip.show();
 }

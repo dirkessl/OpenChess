@@ -18,12 +18,10 @@ bool StockfishAPI::parseResponse(const String& response, StockfishResponse& stoc
   } else {
     // Try Unix line endings (LF LF)
     headerEndPos = response.indexOf("\n\n");
-    if (headerEndPos != -1) {
+    if (headerEndPos != -1)
       jsonOnly = response.substring(headerEndPos + 2);
-    } else {
-      // No header separator found, assume entire response is JSON
-      jsonOnly = response;
-    }
+    else
+      jsonOnly = response; // No header separator found, assume entire response is JSON
   }
 
   // Trim whitespace
@@ -55,33 +53,26 @@ bool StockfishAPI::parseResponse(const String& response, StockfishResponse& stoc
 
   if (!stockfishResp.success) {
     // If not successful, try to get error message
-    if (doc.containsKey("error")) {
+    if (doc.containsKey("error"))
       stockfishResp.errorMessage = doc["error"].as<String>();
-    } else {
+    else if (doc.containsKey("data"))
+      stockfishResp.errorMessage = doc["data"].as<String>();
+    else
       stockfishResp.errorMessage = "Unknown error from API";
-    }
     return false;
   }
 
   // Parse evaluation (can be null)
-  if (doc.containsKey("evaluation")) {
-    if (doc["evaluation"].isNull()) {
-      stockfishResp.evaluation = 0.0f;
-    } else {
-      stockfishResp.evaluation = doc["evaluation"].as<float>();
-    }
-  } else {
-    stockfishResp.evaluation = 0.0f;
-  }
+  stockfishResp.evaluation = 0.0f;
+  if (doc.containsKey("evaluation") && !doc["evaluation"].isNull())
+    stockfishResp.evaluation = doc["evaluation"].as<float>();
 
   // Parse mate (can be null)
   stockfishResp.mateInMoves = 0;
   stockfishResp.hasMate = false;
-  if (doc.containsKey("mate")) {
-    if (!doc["mate"].isNull()) {
-      stockfishResp.mateInMoves = doc["mate"].as<int>();
-      stockfishResp.hasMate = true;
-    }
+  if (doc.containsKey("mate") && !doc["mate"].isNull()) {
+    stockfishResp.mateInMoves = doc["mate"].as<int>();
+    stockfishResp.hasMate = true;
   }
 
   // Parse bestmove (format: "bestmove <move> ponder <move>")
@@ -104,11 +95,10 @@ bool StockfishAPI::parseResponse(const String& response, StockfishResponse& stoc
         ponderStart += 7; // length of "ponder "
         int ponderEnd = bestmoveStr.indexOf(" ", ponderStart);
 
-        if (ponderEnd != -1) {
+        if (ponderEnd != -1)
           stockfishResp.ponderMove = bestmoveStr.substring(ponderStart, ponderEnd);
-        } else {
+        else
           stockfishResp.ponderMove = bestmoveStr.substring(ponderStart);
-        }
       }
     } else {
       // No space found, use entire string after "bestmove " (normal if this move is a checkmate)
@@ -117,10 +107,7 @@ bool StockfishAPI::parseResponse(const String& response, StockfishResponse& stoc
   }
 
   // Parse continuation (top engine line)
-  stockfishResp.continuation = "";
-  if (doc.containsKey("continuation")) {
-    stockfishResp.continuation = doc["continuation"].as<String>();
-  }
+  stockfishResp.continuation = doc.containsKey("continuation") ? doc["continuation"].as<String>() : "";
 
   return true;
 }

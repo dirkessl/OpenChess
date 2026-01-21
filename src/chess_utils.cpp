@@ -14,7 +14,7 @@ String ChessUtils::castlingRightsToString(uint8_t rights) {
   return s;
 }
 
-String ChessUtils::boardToFEN(const char board[8][8], bool isWhiteTurn, const char* castlingRights) {
+String ChessUtils::boardToFEN(const char board[8][8], char currentTurn, const char* castlingRights) {
   String fen = "";
 
   // Board position - FEN expects rank 8 (black pieces) first, rank 1 (white pieces) last
@@ -22,7 +22,7 @@ String ChessUtils::boardToFEN(const char board[8][8], bool isWhiteTurn, const ch
   // boardToFEN loops from row 0 to row 7, so rank 8 is output first (correct for FEN)
   for (int row = 0; row < 8; row++) {
     int emptyCount = 0;
-    for (int col = 0; col < 8; col++) {
+    for (int col = 0; col < 8; col++)
       if (board[row][col] == ' ') {
         emptyCount++;
       } else {
@@ -32,20 +32,17 @@ String ChessUtils::boardToFEN(const char board[8][8], bool isWhiteTurn, const ch
         }
         fen += board[row][col];
       }
-    }
-    if (emptyCount > 0) {
+    if (emptyCount > 0)
       fen += String(emptyCount);
-    }
     if (row < 7)
       fen += "/";
   }
 
   // Active color
-  fen += isWhiteTurn ? " w" : " b";
+  fen += " " + String(currentTurn);
 
   // Castling availability
-  fen += " ";
-  fen += castlingRights;
+  fen += " " + String(castlingRights);
 
   // En passant target square (simplified - assume none)
   fen += " -";
@@ -59,7 +56,7 @@ String ChessUtils::boardToFEN(const char board[8][8], bool isWhiteTurn, const ch
   return fen;
 }
 
-void ChessUtils::fenToBoard(String fen, char board[8][8], bool* isWhiteTurn, String* castlingRights) {
+void ChessUtils::fenToBoard(String fen, char board[8][8], char* currentTurn, String* castlingRights) {
   // Parse FEN string and update board state
   // FEN format: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -69,11 +66,9 @@ void ChessUtils::fenToBoard(String fen, char board[8][8], bool* isWhiteTurn, Str
   String remainingParts = (firstSpace > 0) ? fen.substring(firstSpace + 1) : "";
 
   // Clear board
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
+  for (int row = 0; row < 8; row++)
+    for (int col = 0; col < 8; col++)
       board[row][col] = ' ';
-    }
-  }
 
   // Parse FEN ranks (rank 8 first, rank 1 last)
   // FEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
@@ -102,10 +97,10 @@ void ChessUtils::fenToBoard(String fen, char board[8][8], bool* isWhiteTurn, Str
   }
 
   // Parse active color if requested
-  if (isWhiteTurn != nullptr && remainingParts.length() > 0) {
+  if (currentTurn != nullptr && remainingParts.length() > 0) {
     int secondSpace = remainingParts.indexOf(' ');
     String activeColor = (secondSpace > 0) ? remainingParts.substring(0, secondSpace) : remainingParts;
-    *isWhiteTurn = (activeColor == "w" || activeColor == "W");
+    *currentTurn = (activeColor == "w" || activeColor == "W") ? 'w' : 'b';
     remainingParts = (secondSpace > 0) ? remainingParts.substring(secondSpace + 1) : "";
   }
 
@@ -130,6 +125,50 @@ void ChessUtils::printBoard(const char board[8][8]) {
   }
   Serial.println("  a b c d e f g h");
   Serial.println("========================");
+}
+
+float ChessUtils::evaluatePosition(const char board[8][8]) {
+  // Simple material evaluation
+  // Positive = white advantage, negative = black advantage
+  float evaluation = 0.0f;
+
+  for (int row = 0; row < 8; row++)
+    for (int col = 0; col < 8; col++) {
+      char piece = board[row][col];
+      float value = 0.0f;
+
+      // Get piece value (uppercase = white, lowercase = black)
+      switch (tolower(piece)) {
+        case 'p':
+          value = 1.0f;
+          break; // Pawn
+        case 'n':
+          value = 3.0f;
+          break; // Knight
+        case 'b':
+          value = 3.0f;
+          break; // Bishop
+        case 'r':
+          value = 5.0f;
+          break; // Rook
+        case 'q':
+          value = 9.0f;
+          break; // Queen
+        case 'k':
+          value = 0.0f;
+          break; // King (not counted)
+        default:
+          continue; // Empty square
+      }
+
+      // Add to evaluation (positive for white, negative for black)
+      if (piece >= 'A' && piece <= 'Z')
+        evaluation += value; // White piece
+      else if (piece >= 'a' && piece <= 'z')
+        evaluation -= value; // Black piece
+    }
+
+  return evaluation;
 }
 
 bool ChessUtils::ensureNvsInitialized() {

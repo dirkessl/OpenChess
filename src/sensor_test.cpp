@@ -2,19 +2,6 @@
 #include "chess_utils.h"
 #include <Arduino.h>
 
-// Expected initial configuration for sensor testing
-// Standard chess: Queen on her own color (white queen on light, black queen on dark)
-const char SensorTest::INITIAL_BOARD[8][8] = {
-    {'R', 'N', 'B', 'K', 'Q', 'B', 'N', 'R'}, // row 0 (rank 8 - black pieces at top)
-    {'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'}, // row 1 (rank 7)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 2 (rank 6)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 3 (rank 5)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 4 (rank 4)
-    {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '}, // row 5 (rank 3)
-    {'p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'}, // row 6 (rank 2)
-    {'r', 'n', 'b', 'k', 'q', 'b', 'n', 'r'}  // row 7 (rank 1 - white pieces at bottom)
-};
-
 SensorTest::SensorTest(BoardDriver* bd) : boardDriver(bd) {
 }
 
@@ -31,36 +18,17 @@ void SensorTest::update() {
   boardDriver->readSensors();
 
   // Update LEDs based on sensor state (no clearing to prevent flicker)
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
-      if (boardDriver->getSensorState(row, col)) {
+  for (int row = 0; row < 8; row++)
+    for (int col = 0; col < 8; col++)
+      if (boardDriver->getSensorState(row, col))
         // Light up detected pieces in white
         boardDriver->setSquareLED(row, col, 0, 0, 0, 255);
-      } else {
+      else
         // Turn off LED where no piece is detected
         boardDriver->setSquareLED(row, col, 0, 0, 0, 0);
-      }
-    }
-  }
 
   // Show the updated LED state
   boardDriver->showLEDs();
 
-  // Print board state periodically for debugging
-  static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 2000) { // Print every 2 seconds
-    ChessUtils::printBoard(INITIAL_BOARD);
-    lastPrint = millis();
-  }
-
-  delay(50); // Small delay to prevent overwhelming the system
-}
-
-bool SensorTest::isActive() {
-  return true; // Always active once started
-}
-
-void SensorTest::reset() {
-  boardDriver->clearAllLEDs();
-  Serial.println("Sensor test reset - ready for testing!");
+  delay(50);
 }

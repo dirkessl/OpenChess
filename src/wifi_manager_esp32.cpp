@@ -18,12 +18,11 @@ WiFiManagerESP32::WiFiManagerESP32(BoardDriver* boardDriver) : server(AP_PORT) {
   wifiSSID = SECRET_SSID;
   wifiPassword = SECRET_PASS;
   // Initialize board state to empty
-  for (int row = 0; row < 8; row++) {
+  for (int row = 0; row < 8; row++)
     for (int col = 0; col < 8; col++) {
       boardState[row][col] = ' ';
       pendingBoardEdit[row][col] = ' ';
     }
-  }
 }
 
 void WiFiManagerESP32::begin() {
@@ -36,21 +35,25 @@ void WiFiManagerESP32::begin() {
     wifiPassword = prefs.getString("pass", SECRET_PASS);
     prefs.end();
   }
-  // ESP32 can run both AP and Station modes simultaneously. Start Access Point first (always available)
-  Serial.printf("Creating Access Point with SSID: %s\nUsing password: %s\n", AP_SSID, AP_PASSWORD);
   if (!WiFi.softAP(AP_SSID, AP_PASSWORD)) {
     Serial.println("ERROR: Failed to create Access Point!");
     return;
   }
-  Serial.println("Debug: Access Point created successfully");
-  // Try to connect to existing WiFi
-  bool connected = connectToWiFi(wifiSSID, wifiPassword) ? Serial.println("Successfully connected to WiFi network!") : Serial.println("Failed to connect to WiFi. Access Point mode still available.");
-  // Print connection information
-  Serial.println("=== WiFi Connection Information ===");
+  bool connected = connectToWiFi(wifiSSID, wifiPassword);
+  Serial.println("==== WiFi Connection Information ====");
+  Serial.println("A WiFi Access Point was created:");
+  Serial.println("- SSID: " AP_SSID);
+  Serial.println("- Password: " AP_PASSWORD);
+  Serial.println("- Website: http://" + WiFi.softAPIP().toString());
+  Serial.println("- MAC Address: " + WiFi.softAPmacAddress());
   if (connected) {
-    Serial.printf("Connected to WiFi: %s\nAccess board via: http://%s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+    Serial.println("Connected to WiFi network: ");
+    Serial.println("- SSID: " + wifiSSID);
+    Serial.println("- Password: " + wifiPassword);
+    Serial.println("- Website: http://" + WiFi.localIP().toString());
+  } else {
+    Serial.println("Configure WiFi credentials from the web interface to join your WiFi network (Stockfish needs internet)");
   }
-  Serial.printf("Access board via: http://%s\nMAC Address: %s\n", WiFi.softAPIP().toString().c_str(), WiFi.softAPmacAddress().c_str());
   Serial.println("=====================================");
 
   // Set up web server routes with async handlers
@@ -87,11 +90,10 @@ String WiFiManagerESP32::getBoardUpdateJSON() {
     resp += "[";
     for (int col = 0; col < 8; col++) {
       char piece = boardState[row][col];
-      if (piece == ' ') {
+      if (piece == ' ')
         resp += "\"\"";
-      } else {
+      else
         resp += "\"" + String(piece) + "\"";
-      }
       if (col < 7)
         resp += ",";
     }
@@ -109,7 +111,7 @@ String WiFiManagerESP32::getWiFiInfoJSON() {
 }
 
 void WiFiManagerESP32::handleBoardEditSuccess(AsyncWebServerRequest* request) {
-  for (int row = 0; row < 8; row++) {
+  for (int row = 0; row < 8; row++)
     for (int col = 0; col < 8; col++) {
       String paramName = "r" + String(row) + "c" + String(col);
       if (request->hasArg(paramName.c_str())) {
@@ -122,7 +124,6 @@ void WiFiManagerESP32::handleBoardEditSuccess(AsyncWebServerRequest* request) {
         pendingBoardEdit[row][col] = ' ';
       }
     }
-  }
   hasPendingEdit = true;
   Serial.println("Board edit received and stored");
   request->send(200, "text/plain", "OK");
@@ -195,36 +196,32 @@ void WiFiManagerESP32::handleBotConfiguration(AsyncWebServerRequest* request) {
 }
 
 void WiFiManagerESP32::updateBoardState(char newBoardState[8][8], float evaluation) {
-  for (int row = 0; row < 8; row++) {
-    for (int col = 0; col < 8; col++) {
+  for (int row = 0; row < 8; row++)
+    for (int col = 0; col < 8; col++)
       boardState[row][col] = newBoardState[row][col];
-    }
-  }
   boardStateValid = true;
   boardEvaluation = evaluation;
 }
 
 bool WiFiManagerESP32::getPendingBoardEdit(char editBoard[8][8]) {
   if (hasPendingEdit) {
-    for (int row = 0; row < 8; row++) {
-      for (int col = 0; col < 8; col++) {
+    for (int row = 0; row < 8; row++)
+      for (int col = 0; col < 8; col++)
         editBoard[row][col] = pendingBoardEdit[row][col];
-      }
-    }
     return true;
   }
   return false;
 }
 
 void WiFiManagerESP32::clearPendingEdit() {
+  updateBoardState(pendingBoardEdit, boardEvaluation);
   hasPendingEdit = false;
 }
 
 bool WiFiManagerESP32::connectToWiFi(String ssid, String password, bool fromWeb) {
   if (!fromWeb && WiFi.status() == WL_CONNECTED) {
     Serial.println("Already connected to WiFi");
-    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
-    apMode = false; // We're connected, but AP is still running
+    apMode = false;
     return true;
   }
   Serial.println("=== Connecting to WiFi Network" + String(fromWeb ? "(from web)" : "") + " ===");
@@ -244,8 +241,7 @@ bool WiFiManagerESP32::connectToWiFi(String ssid, String password, bool fromWeb)
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Connected to WiFi!");
-    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
-    apMode = false; // We're connected, but AP is still running
+    apMode = false;
     return true;
   } else {
     Serial.println("Failed to connect to WiFi");

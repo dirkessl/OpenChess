@@ -25,11 +25,11 @@ BotConfig botConfig = {StockfishSettings::medium(), true};
 
 // Global instances
 BoardDriver boardDriver;
-WiFiManager wifiManager(&boardDriver);
 ChessEngine chessEngine;
-ChessMoves chessMoves(&boardDriver, &chessEngine);
-SensorTest sensorTest(&boardDriver);
+WiFiManager wifiManager(&boardDriver);
+ChessMoves chessMoves(&boardDriver, &chessEngine, &wifiManager);
 ChessBot* chessBot = nullptr;
+SensorTest sensorTest(&boardDriver);
 
 // Current game state
 GameMode currentMode = MODE_SELECTION;
@@ -48,75 +48,30 @@ void initializeSelectedMode(GameMode mode);
 // SETUP
 // ---------------------------
 void setup() {
-  // Initialize Serial with extended timeout
   Serial.begin(115200);
-
-  // Wait for Serial to be ready (critical for RP2040)
-  unsigned long startTime = millis();
-  while (!Serial && (millis() - startTime < 10000)) {
-    // Wait up to 10 seconds for Serial connection
-    delay(100);
-  }
-
-  // Force a delay to ensure Serial is stable
-  delay(2000);
+  delay(3000);
 
   Serial.println();
   Serial.println("================================================");
   Serial.println("         OpenChess Starting Up");
   Serial.println("================================================");
-  Serial.println("DEBUG: Serial communication established");
-  Serial.printf("DEBUG: Millis since boot: %lu\n", millis());
   if (!ChessUtils::ensureNvsInitialized())
     Serial.println("WARNING: NVS init failed (Preferences may not work)");
-  // Initialize board driver
   boardDriver.begin();
-  Serial.println("DEBUG: Board driver initialized successfully");
-
-  // Initialize WiFi Manager
   wifiManager.begin();
-  Serial.println("DEBUG: WiFi Manager initialization completed");
-  Serial.println("A WiFi Access Point was created, connect to it using:");
-  Serial.println("- Network SSID: OpenChess");
-  Serial.println("- Password: chess123");
-  Serial.println("- Web interface: http://192.168.4.1");
-  Serial.println("Configure WiFi credentials from the web interface to join your local WiFi network (Stockfish needs internet).");
-  Serial.println("The board will also attempt to connect to previously saved WiFi networks automatically.");
-
   Serial.println();
   Serial.println("=== Game Selection Mode ===");
   showGameSelection();
-
-  Serial.println("DEBUG: Game selection LEDs should now be visible");
-  Serial.println("Three LEDs should be lit in the center of the board:");
-  Serial.println("Position 1 (3,3): Chess Moves (Human vs Human)");
-  Serial.println("Position 2 (3,4): Chess Bot (Human vs AI)");
-  Serial.println("Position 3 (4,4): Sensor Test");
+  Serial.println("Three LEDs are lit in the center of the board:");
+  Serial.println("Gold:  Chess Moves (Human vs Human)");
+  Serial.println("White: Chess Bot (Human vs AI)");
+  Serial.println("Red:   Sensor Test");
   Serial.println();
   Serial.println("Place any chess piece on a LED to select that mode");
   Serial.println("================================================");
-  Serial.println("         Setup Complete - Entering Main Loop");
-  Serial.println("================================================");
 }
 
-// ---------------------------
-// MAIN LOOP
-// ---------------------------
 void loop() {
-  static unsigned long lastDebugPrint = 0;
-  static bool firstLoop = true;
-
-  if (firstLoop) {
-    Serial.println("DEBUG: Entered main loop - system is running");
-    firstLoop = false;
-  }
-
-  // Print periodic status every 20 seconds
-  if (millis() - lastDebugPrint > 20000) {
-    Serial.printf("DEBUG: Loop running, uptime: %lu seconds\n", millis() / 1000);
-    lastDebugPrint = millis();
-  }
-
   // Check for pending board edits from WiFi
   char editBoard[8][8];
   if (wifiManager.getPendingBoardEdit(editBoard)) {
@@ -135,33 +90,10 @@ void loop() {
     wifiManager.clearPendingEdit();
   }
 
-  // Update board state for WiFi display
-  static unsigned long lastBoardUpdate = 0;
-  if (millis() - lastBoardUpdate > 100) { // Update every 100ms (that's really stupid, should immediately upate when there is any change instead of polling)
-    char currentBoard[8][8];
-    bool boardUpdated = false;
-
-    float evaluation = 0.0;
-    if (currentMode == MODE_CHESS_MOVES && modeInitialized) {
-      chessMoves.getBoardState(currentBoard);
-      boardUpdated = true;
-    } else if (currentMode == MODE_BOT && modeInitialized && chessBot != nullptr) {
-      chessBot->getBoardState(currentBoard);
-      evaluation = chessBot->getEvaluation();
-      boardUpdated = true;
-    }
-
-    if (boardUpdated) {
-      wifiManager.updateBoardState(currentBoard, evaluation);
-    }
-
-    lastBoardUpdate = millis();
-  }
-
   // Check for WiFi game selection
   int selectedMode = wifiManager.getSelectedGameMode();
   if (selectedMode > 0) {
-    Serial.printf("DEBUG: WiFi game selection detected: %d\n", selectedMode);
+    Serial.printf("WiFi game selection detected: %d\n", selectedMode);
 
     switch (selectedMode) {
       case 1:
@@ -169,7 +101,6 @@ void loop() {
         break;
       case 2:
         currentMode = MODE_BOT;
-        // Bot config (difficulty and color) should be sent separately
         botConfig = wifiManager.getBotConfig();
         break;
       case 3:
@@ -203,11 +134,6 @@ void loop() {
   if (currentMode == MODE_SELECTION) {
     handleGameSelection();
   } else {
-    static bool modeChangeLogged = false;
-    if (!modeChangeLogged) {
-      Serial.printf("DEBUG: Mode changed to: %d\n", currentMode);
-      modeChangeLogged = true;
-    }
     if (!modeInitialized) {
       initializeSelectedMode(currentMode);
       modeInitialized = true;
@@ -219,9 +145,8 @@ void loop() {
         chessMoves.update();
         break;
       case MODE_BOT:
-        if (chessBot != nullptr) {
+        if (chessBot != nullptr)
           chessBot->update();
-        }
         break;
       case MODE_SENSOR_TEST:
         sensorTest.update();
@@ -234,7 +159,7 @@ void loop() {
     }
   }
 
-  delay(25); // Small delay to prevent overwhelming the system
+  delay(25);
 }
 
 // ---------------------------
@@ -263,24 +188,18 @@ void handleGameSelection() {
     currentMode = MODE_CHESS_MOVES;
     modeInitialized = false;
     boardDriver.clearAllLEDs();
-    delay(500);
   } else if (boardDriver.getSensorState(3, 4)) {
     Serial.println("Mode: 'Chess Bot' Selected! Showing bot configuration...");
     currentMode = MODE_BOT;
     modeInitialized = false;
     boardDriver.clearAllLEDs();
-    delay(500);
-    // Show bot configuration selection instead of starting immediately
     showBotConfigSelection();
   } else if (boardDriver.getSensorState(4, 4)) {
     Serial.println("Mode: 'Sensor Test' Selected!");
     currentMode = MODE_SENSOR_TEST;
     modeInitialized = false;
     boardDriver.clearAllLEDs();
-    delay(250);
   }
-
-  delay(100);
 }
 
 void initializeSelectedMode(GameMode mode) {
@@ -292,9 +211,8 @@ void initializeSelectedMode(GameMode mode) {
     case MODE_BOT:
       Serial.printf("Starting 'Chess Bot' (Depth: %d, Player is %s)...\n", botConfig.stockfishSettings.depth, botConfig.playerIsWhite ? "White" : "Black");
       // Clean up any existing bot instance
-      if (chessBot != nullptr) {
+      if (chessBot != nullptr)
         delete chessBot;
-      }
       // Create new bot with current configuration
       chessBot = new ChessBot(&boardDriver, &chessEngine, &wifiManager, botConfig);
       chessBot->begin();
@@ -360,8 +278,8 @@ void handleBotConfigSelection() {
     boardDriver.readSensors();
 
     // Check rows 2 and 5 for selections
-    for (int row : {2, 5}) {
-      for (int col = 0; col < 8; col++) {
+    for (int row : {2, 5})
+      for (int col = 0; col < 8; col++)
         if (boardDriver.getSensorState(row, col)) {
           // Determine player color based on row
           botConfig.playerIsWhite = (row == 2);
@@ -390,8 +308,6 @@ void handleBotConfigSelection() {
           delay(500);
           return;
         }
-      }
-    }
 
     delay(100);
   }
