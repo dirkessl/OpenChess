@@ -114,9 +114,10 @@ bool ChessBot::parseStockfishResponse(String response, String& bestMove, float& 
 
 void ChessBot::makeBotMove() {
   Serial.println("=== BOT MOVE CALCULATION ===");
-  showBotThinking();
+  std::atomic<bool>* stopAnimation = boardDriver->startThinkingAnimation();
   String bestMove;
   String response = makeStockfishRequest(ChessUtils::boardToFEN(board, currentTurn, chessEngine));
+  stopAnimation->store(true);
   if (parseStockfishResponse(response, bestMove, currentEvaluation)) {
     Serial.println("=== STOCKFISH EVALUATION ===");
     Serial.printf("%s advantage: %.2f pawns\n", currentEvaluation > 0 ? "White" : "Black", currentEvaluation);
@@ -140,14 +141,14 @@ void ChessBot::makeBotMove() {
         Serial.println("ERROR: Bot tried to move from an empty square!");
         return;
       }
-      executeBotMove(fromRow, fromCol, toRow, toCol);
+      executeOpponentMove(fromRow, fromCol, toRow, toCol);
     } else {
       Serial.printf("Failed to parse bot move - %s\n", validationError.c_str());
     }
   }
 }
 
-void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
+void ChessBot::executeOpponentMove(int fromRow, int fromCol, int toRow, int toCol) {
   char piece = board[fromRow][fromCol];
   char capturedPiece = board[toRow][toCol];
 
@@ -161,51 +162,33 @@ void ChessBot::executeBotMove(int fromRow, int fromCol, int toRow, int toCol) {
   board[toRow][toCol] = piece;
   board[fromRow][fromCol] = ' ';
 
-  bool castling = ChessUtils::isCastlingMove(fromRow, fromCol, toRow, toCol, piece);
-  if (castling)
-    applyCastling(fromRow, fromCol, toRow, toCol, piece);
-  updateCastlingRightsAfterMove(fromRow, fromCol, toRow, toCol, piece, capturedPiece);
-
-  if (!castling) {
-    if (isEnPassantCapture) {
-      Serial.printf("Bot wants to perform en passant: move pawn from %c%d to %c%d and remove captured pawn at %c%d\nPlease make this move on the physical board...\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow, (char)('a' + toCol), 8 - capturedPawnRow);
-    } else {
-      Serial.printf("Bot wants to move piece from %c%d to %c%d\nPlease make this move on the physical board...\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow);
-    }
+  if (!ChessUtils::isCastlingMove(fromRow, fromCol, toRow, toCol, piece)) {
+    if (isEnPassantCapture)
+      Serial.printf("Opponent wants to perform en passant: move pawn from %c%d to %c%d and remove captured pawn at %c%d\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow, (char)('a' + toCol), 8 - capturedPawnRow);
+    else
+      Serial.printf("Opponent wants to move piece from %c%d to %c%d\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow);
 
     bool isCapture = (capturedPiece != ' ');
-
-    // Show the move that needs to be made
-    showBotMoveIndicator(fromRow, fromCol, toRow, toCol, isCapture, isEnPassantCapture, capturedPawnRow);
-    // Wait for user to physically complete the bot's move
-    waitForBotMoveCompletion(fromRow, fromCol, toRow, toCol, isCapture, isEnPassantCapture, capturedPawnRow);
-
+    showOpponentMoveIndicator(fromRow, fromCol, toRow, toCol, isCapture, isEnPassantCapture, capturedPawnRow);
+    waitForOpponentMoveCompletion(fromRow, fromCol, toRow, toCol, isCapture, isEnPassantCapture, capturedPawnRow);
     boardDriver->clearAllLEDs();
   } else {
-    int rookFromCol = ((toCol - fromCol) == 2) ? 7 : 0;
-    int rookToCol = ((toCol - fromCol) == 2) ? 5 : 3;
-    Serial.printf("Bot wants to castle: move king %c%d -> %c%d and rook %c%d -> %c%d\nPlease make this move on the physical board...\n", (char)('a' + fromCol), 8 - fromRow, (char)('a' + toCol), 8 - toRow, (char)('a' + rookFromCol), 8 - fromRow, (char)('a' + rookToCol), 8 - toRow);
-    waitForBotCastlingCompletion(fromRow, fromCol, toRow, toCol);
+    Serial.println("Opponent wants to castle");
+    applyCastling(fromRow, fromCol, toRow, toCol, piece, true);
   }
+  updateCastlingRightsAfterMove(fromRow, fromCol, toRow, toCol, piece, capturedPiece);
 
   if (capturedPiece != ' ') {
     Serial.printf("Piece captured: %c\n", capturedPiece);
-    boardDriver->captureAnimation();
+    boardDriver->captureAnimation(toRow, toCol);
+  } else {
+    confirmSquareCompletion(toRow, toCol);
   }
-  confirmSquareCompletion(toRow, toCol);
 }
 
-void ChessBot::showBotThinking() {
-  boardDriver->clearAllLEDs();
-  boardDriver->setSquareLED(0, 0, LedColors::Blu.r, LedColors::Blu.g, LedColors::Blu.b);
-  boardDriver->setSquareLED(0, 7, LedColors::Blu.r, LedColors::Blu.g, LedColors::Blu.b);
-  boardDriver->setSquareLED(7, 0, LedColors::Blu.r, LedColors::Blu.g, LedColors::Blu.b);
-  boardDriver->setSquareLED(7, 7, LedColors::Blu.r, LedColors::Blu.g, LedColors::Blu.b);
-  boardDriver->showLEDs();
-}
-
-void ChessBot::showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant, int enPassantCapturedPawnRow) {
-  boardDriver->clearAllLEDs();
+void ChessBot::showOpponentMoveIndicator(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant, int enPassantCapturedPawnRow) {
+  boardDriver->acquireLEDs();
+  boardDriver->clearAllLEDs(false);
   // Show source square (where to pick up from)
   boardDriver->setSquareLED(fromRow, fromCol, LedColors::Cyan.r, LedColors::Cyan.g, LedColors::Cyan.b);
   // Show destination square (where to place)
@@ -215,16 +198,16 @@ void ChessBot::showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toC
     boardDriver->setSquareLED(toRow, toCol, LedColors::White.r, LedColors::White.g, LedColors::White.b);
   if (isEnPassant)
     boardDriver->setSquareLED(enPassantCapturedPawnRow, toCol, LedColors::Purple.r, LedColors::Purple.g, LedColors::Purple.b);
-
   boardDriver->showLEDs();
+  boardDriver->releaseLEDs();
 }
 
-void ChessBot::waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant, int enPassantCapturedPawnRow) {
+void ChessBot::waitForOpponentMoveCompletion(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant, int enPassantCapturedPawnRow) {
   bool piecePickedUp = false;
   bool capturedPieceRemoved = false;
   bool moveCompleted = false;
 
-  Serial.println("Waiting for you to complete the bot's move...");
+  Serial.println("Waiting for you to complete the opponent's move...");
 
   while (!moveCompleted) {
     boardDriver->readSensors();
@@ -236,62 +219,28 @@ void ChessBot::waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int
       if (!boardDriver->getSensorState(captureCheckRow, toCol)) {
         capturedPieceRemoved = true;
         if (isEnPassant)
-          Serial.println("En passant captured pawn removed, now complete the bot's move...");
+          Serial.println("En passant captured pawn removed, now complete the move...");
         else
-          Serial.println("Captured piece removed, now complete the bot's move...");
+          Serial.println("Captured piece removed, now complete the move...");
       }
     }
 
     // Check if piece was picked up from source
     if (!piecePickedUp && !boardDriver->getSensorState(fromRow, fromCol)) {
       piecePickedUp = true;
-      Serial.println("Bot piece picked up, now place it on the destination...");
+      Serial.println("Piece picked up, now place it on the destination...");
     }
 
     // Check if piece was placed on destination
-    // For captures: wait until captured piece is removed AND bot piece is placed
-    // For normal moves: just wait for bot piece to be placed
+    // For captures: wait until captured piece is removed AND piece is placed
+    // For normal moves: just wait for piece to be placed
     if (piecePickedUp && boardDriver->getSensorState(toRow, toCol))
       if (!isCapture || (isCapture && capturedPieceRemoved)) {
         moveCompleted = true;
-        Serial.println("Bot move completed on physical board!");
+        Serial.println("Move completed on physical board!");
       }
 
     delay(SENSOR_READ_DELAY_MS);
     boardDriver->updateSensorPrev();
   }
-}
-
-void ChessBot::waitForBotCastlingCompletion(int kingFromRow, int kingFromCol, int kingToRow, int kingToCol) {
-  int deltaCol = kingToCol - kingFromCol;
-  int rookFromCol = (deltaCol == 2) ? 7 : 0;
-  int rookToCol = (deltaCol == 2) ? 5 : 3;
-
-  Serial.println("Waiting for you to complete the bot's castling move...");
-
-  // Set LEDs once at the beginning to avoid flickering
-  boardDriver->clearAllLEDs();
-  boardDriver->setSquareLED(kingFromRow, kingFromCol, LedColors::Cyan.r, LedColors::Cyan.g, LedColors::Cyan.b);
-  boardDriver->setSquareLED(kingFromRow, rookFromCol, LedColors::Cyan.r, LedColors::Cyan.g, LedColors::Cyan.b);
-  boardDriver->setSquareLED(kingToRow, kingToCol, LedColors::White.r, LedColors::White.g, LedColors::White.b);
-  boardDriver->setSquareLED(kingToRow, rookToCol, LedColors::White.r, LedColors::White.g, LedColors::White.b);
-  boardDriver->showLEDs();
-
-  bool kingSourceEmpty = false;
-  bool rookSourceEmpty = false;
-  bool kingDestOccupied = false;
-  bool rookDestOccupied = false;
-
-  while (!(kingSourceEmpty && rookSourceEmpty && kingDestOccupied && rookDestOccupied)) {
-    boardDriver->readSensors();
-
-    kingSourceEmpty = !boardDriver->getSensorState(kingFromRow, kingFromCol);
-    rookSourceEmpty = !boardDriver->getSensorState(kingFromRow, rookFromCol);
-    kingDestOccupied = boardDriver->getSensorState(kingToRow, kingToCol);
-    rookDestOccupied = boardDriver->getSensorState(kingToRow, rookToCol);
-
-    delay(SENSOR_READ_DELAY_MS);
-  }
-
-  boardDriver->clearAllLEDs();
 }

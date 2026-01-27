@@ -30,6 +30,7 @@ class ChessGame {
   // Common initialization and game flow methods
   void initializeBoard();
   void waitForBoardSetup();
+  void waitForBoardSetup(const char targetBoard[8][8]);
   void processPlayerMove(int fromRow, int fromCol, int toRow, int toCol, char piece);
   bool tryPlayerMove(char playerColor, int& fromRow, int& fromCol, int& toRow, int& toCol, char& movedPiece);
   void updateGameStatus();
@@ -37,7 +38,7 @@ class ChessGame {
   // Chess rule helpers
   void recomputeCastlingRightsFromBoard();
   void updateCastlingRightsAfterMove(int fromRow, int fromCol, int toRow, int toCol, char movedPiece, char capturedPiece);
-  void applyCastling(int kingFromRow, int kingFromCol, int kingToRow, int kingToCol, char kingPiece);
+  void applyCastling(int kingFromRow, int kingFromCol, int kingToRow, int kingToCol, char kingPiece, bool waitForKingCompletion = false);
   bool applyPawnPromotionIfNeeded(int toRow, int toCol, char movedPiece, char& promotedPieceOut);
   bool findKingPosition(char colorToMove, int& kingRow, int& kingCol);
   void confirmSquareCompletion(int row, int col);

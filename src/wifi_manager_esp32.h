@@ -15,6 +15,9 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 
+// Forward declaration for Lichess config
+struct LichessConfig;
+
 // ---------------------------
 // WiFi Configuration
 // ---------------------------
@@ -37,6 +40,7 @@ class WiFiManagerESP32 {
   String wifiSSID;
   String wifiPassword;
   String gameMode;
+  String lichessToken;
 
   // Bot configuration
   BotConfig botConfig = {StockfishSettings::medium(), true};
@@ -53,9 +57,11 @@ class WiFiManagerESP32 {
   // Web interface methods
   String getWiFiInfoJSON();
   String getBoardUpdateJSON();
+  String getLichessInfoJSON();
   void handleBoardEditSuccess(AsyncWebServerRequest* request);
   void handleConnectWiFi(AsyncWebServerRequest* request);
   void handleGameSelection(AsyncWebServerRequest* request);
+  void handleSaveLichessToken(AsyncWebServerRequest* request);
 
  public:
   WiFiManagerESP32(BoardDriver* boardDriver);
@@ -69,6 +75,9 @@ class WiFiManagerESP32 {
   void resetGameSelection() { gameMode = "0"; };
   // Bot configuration
   BotConfig getBotConfig() { return botConfig; }
+  // Lichess configuration
+  LichessConfig getLichessConfig();
+  String getLichessToken() { return lichessToken; }
   // Board state management (FEN-based)
   void updateBoardState(const String& fen, float evaluation = 0.0f);
   String getCurrentFen() { return currentFen; }

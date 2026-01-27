@@ -11,21 +11,94 @@
     <div class="container">
         <h2>OpenChess Home</h2>
         <div class="status" id="status">Loading status...</div>
-        <form id="wifiForm">
-            <div class="form-group">
-                <label for="ssid">WiFi SSID:</label>
-                <input type="text" name="ssid" id="ssid" value="" placeholder="Enter Your WiFi SSID">
+
+        <!-- WiFi Settings Section -->
+        <div class="settings-section">
+            <div class="section-header" onclick="toggleSection('wifi')">
+                <span class="section-icon" id="wifi-icon">▶</span>
+                <h3>WiFi Settings</h3>
             </div>
-            <div class="form-group">
-                <label for="password">WiFi Password:</label>
-                <input type="text" name="password" id="password" value="" placeholder="Enter Your WiFi Password">
+            <div class="section-content" id="wifi-content">
+                <form id="wifiForm">
+                    <div class="form-group">
+                        <label for="ssid">WiFi SSID:</label>
+                        <input type="text" name="ssid" id="ssid" value="" placeholder="Enter Your WiFi SSID">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">WiFi Password:</label>
+                        <input type="text" name="password" id="password" value=""
+                            placeholder="Enter Your WiFi Password">
+                    </div>
+                    <input type="submit" style="background-color: #4CAF50;" value="Connect to WiFi">
+                </form>
             </div>
-            <input type="submit" style="background-color: #4CAF50;" value="Connect to WiFi">
-        </form>
+        </div>
+
+        <!-- Lichess Settings Section -->
+        <div class="settings-section">
+            <div class="section-header" onclick="toggleSection('lichess')">
+                <span class="section-icon" id="lichess-icon">▶</span>
+                <h3>Lichess Settings</h3>
+            </div>
+            <div class="section-content" id="lichess-content">
+                <p class="section-description">
+                    Play Lichess games on your physical board.
+                    <a href="https://lichess.org/account/oauth/token" target="_blank" style="color: #ec8703;">
+                        Get your API token here
+                    </a>
+                </p>
+                <div class="lichess-status" id="lichess-status">
+                    <span id="lichess-token-status">No token configured</span>
+                </div>
+                <form id="lichessForm">
+                    <div class="form-group">
+                        <label for="lichessToken">API Token:</label>
+                        <input type="password" name="lichessToken" id="lichessToken" value=""
+                            placeholder="lip_xxxxxxxxxxxxx">
+                    </div>
+                    <input type="submit" style="background-color: #9c59b6;" value="Save Lichess Token">
+                </form>
+            </div>
+        </div>
+
+        <!-- Future Settings Placeholder Section -->
+        <div class="settings-section">
+            <div class="section-header" onclick="toggleSection('other')">
+                <span class="section-icon" id="other-icon">▶</span>
+                <h3>Other Settings</h3>
+            </div>
+            <div class="section-content" id="other-content">
+                <p class="section-description" style="text-align: center; color: #888;">
+                    More settings coming soon...
+                </p>
+            </div>
+        </div>
+
         <a href="/game" class="button">GameMode Selection</a>
         <a href="/board" class="button">View Board</a>
     </div>
     <script>
+        // Section toggle state
+        const sectionStates = {
+            wifi: false,
+            lichess: false,
+            other: false
+        };
+
+        function toggleSection(name) {
+            sectionStates[name] = !sectionStates[name];
+            const content = document.getElementById(name + '-content');
+            const icon = document.getElementById(name + '-icon');
+
+            if (sectionStates[name]) {
+                content.classList.add('expanded');
+                icon.textContent = '▼';
+            } else {
+                content.classList.remove('expanded');
+                icon.textContent = '▶';
+            }
+        }
+
         function updateWiFiInfo(retries = 0, maxRetries = 20) {
             fetch('/wifi-info')
                 .then(response => response.json())
@@ -46,10 +119,29 @@
                 });
         }
 
-        // Fetch WiFi information on page load
-        updateWiFiInfo();
+        function updateLichessInfo() {
+            fetch('/lichess-info')
+                .then(response => response.json())
+                .then(data => {
+                    const statusEl = document.getElementById('lichess-token-status');
+                    if (data.hasToken) {
+                        statusEl.textContent = 'Token configured: ' + data.maskedToken;
+                        statusEl.style.color = '#4CAF50';
+                    } else {
+                        statusEl.textContent = 'No token configured';
+                        statusEl.style.color = '#f44336';
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('lichess-token-status').textContent = 'Error loading status';
+                });
+        }
 
-        // Handle form submission
+        // Fetch info on page load
+        updateWiFiInfo();
+        updateLichessInfo();
+
+        // Handle WiFi form submission
         document.getElementById('wifiForm').addEventListener('submit', function (e) {
             e.preventDefault();
             const ssid = document.getElementById('ssid').value;
@@ -79,6 +171,40 @@
                 .catch(() => {
                     document.getElementById('status').textContent = 'Connecting... (retrying)';
                     setTimeout(() => updateWiFiInfo(0, 20), 1000);
+                });
+        });
+
+        // Handle Lichess form submission
+        document.getElementById('lichessForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const token = document.getElementById('lichessToken').value;
+
+            if (token.length < 10) {
+                alert('Please enter a valid Lichess API token');
+                return;
+            }
+
+            const formData = new URLSearchParams();
+            formData.append('token', token);
+
+            fetch('/save-lichess-token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData
+            })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Lichess token saved successfully!');
+                        document.getElementById('lichessToken').value = '';
+                        updateLichessInfo();
+                    } else {
+                        alert('Failed to save token. Please try again.');
+                    }
+                })
+                .catch(() => {
+                    alert('Error saving token. Please try again.');
                 });
         });
     </script>

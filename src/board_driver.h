@@ -2,6 +2,11 @@
 #define BOARD_DRIVER_H
 
 #include <Adafruit_NeoPixel.h>
+#include <atomic>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 
 // ---------------------------
 // Hardware Configuration
@@ -51,6 +56,39 @@
 #define SENSOR_READ_DELAY_MS 40
 #define DEBOUNCE_MS 125
 
+// Animation job types for async queue
+enum class AnimationType : uint8_t { CAPTURE,
+                                     PROMOTION,
+                                     BLINK,
+                                     WAITING,
+                                     THINKING,
+                                     FIREWORK,
+                                     FLASH };
+
+// Animation job with parameters union for queue
+struct AnimationJob {
+  AnimationType type;
+  std::atomic<bool>* stopFlag; // For cancellable animations
+  union {
+    struct {
+      int row, col;
+    } capture;
+    struct {
+      int col;
+    } promotion;
+    struct {
+      int row, col;
+      uint8_t r, g, b;
+      int times;
+      bool clearAfter;
+    } blink;
+    struct {
+      uint8_t r, g, b;
+      int times;
+    } flash;
+  } params;
+};
+
 // ---------------------------
 // Board Driver Class
 // Logical board coordinates: row 0 = rank 8, column 0 = file a
@@ -58,6 +96,21 @@
 class BoardDriver {
  private:
   Adafruit_NeoPixel strip;
+
+  // Animation queue system
+  static QueueHandle_t animationQueue;
+  static TaskHandle_t animationTaskHandle;
+  static SemaphoreHandle_t ledMutex;
+  static BoardDriver* instance;
+  static void animationWorkerTask(void* param);
+  void executeAnimation(const AnimationJob& job);
+  void doCapture(int row, int col);
+  void doPromotion(int col);
+  void doBlink(int row, int col, uint8_t r, uint8_t g, uint8_t b, int times, bool clearAfter);
+  void doWaiting(std::atomic<bool>* stopFlag);
+  void doThinking(std::atomic<bool>* stopFlag);
+  void doFirework();
+  void doFlash(uint8_t r, uint8_t g, uint8_t b, int times);
   bool sensorState[NUM_ROWS][NUM_COLS];
   bool sensorPrev[NUM_ROWS][NUM_COLS];
   bool sensorRaw[NUM_ROWS][NUM_COLS];
@@ -98,21 +151,22 @@ class BoardDriver {
   bool getSensorPrev(int row, int col);
   void updateSensorPrev();
 
-  // LED Control
-  void clearAllLEDs();
+  // LED Control (use acquireLEDs/releaseLEDs for multi-call sequences)
+  void acquireLEDs(); // Block until LED strip available
+  void releaseLEDs(); // Release LED strip
+  void clearAllLEDs(bool show = true);
   void setSquareLED(int row, int col, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0);
   void showLEDs();
 
-  // Animation Functions
+  // Animation Functions (queued for async execution)
   void fireworkAnimation();
-  void captureAnimation();
+  void captureAnimation(int row, int col);
   void promotionAnimation(int col);
   void blinkSquare(int row, int col, uint8_t r, uint8_t g, uint8_t b, int times = 3, bool clearAfter = true);
   void showConnectingAnimation();
   void flashBoardAnimation(uint8_t r, uint8_t g, uint8_t b, int times = 3);
-
-  // Setup Functions
-  void updateSetupDisplay();
+  std::atomic<bool>* startThinkingAnimation();
+  std::atomic<bool>* startWaitingAnimation();
 };
 
 #endif // BOARD_DRIVER_H

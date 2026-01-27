@@ -14,9 +14,10 @@ ESP32-based smart chess board with hall effect sensors, WS2812B LEDs, and Stockf
 ### Game Mode Inheritance
 ```
 ChessGame (base) ─┬─ ChessMoves (human vs human)
-                  └─ ChessBot (human vs Stockfish AI)
+                  ├─ ChessBot (human vs Stockfish AI)
+                  └─ ChessLichess (play online Lichess games)
 ```
-Both inherit from `ChessGame` and implement `begin()` and `update()` virtual methods.
+All inherit from `ChessGame` and implement `begin()` and `update()` virtual methods.
 
 ### Data Flow
 1. `main.cpp` owns all core objects, handles game selection via physical piece placement or web UI
@@ -81,8 +82,19 @@ StockfishAPI::parseResponse(json, response)  // Returns StockfishResponse struct
 ```
 
 ### Web API Endpoints (defined in wifi_manager_esp32.cpp)
-- `GET /board-update` - Current FEN + evaluation POST: apply move from web UI
+- `GET /board-update` - Current FEN + evaluation
 - `POST /board-update` - Apply move from web UI
 - `GET /wifi-info` - Current WiFi status
 - `POST /connect-wifi` - Connect to specified WiFi network
 - `POST /gameselect` - Select game mode + bot config
+- `GET /lichess-info` - Lichess token status
+- `POST /save-lichess-token` - Save Lichess API token
+
+### Lichess Integration
+```cpp
+// See chess_lichess.cpp for full example
+LichessAPI::setToken(token)
+LichessAPI::pollForGameEvent(event)  // Find active games
+LichessAPI::pollGameStream(gameId, state)  // Get game updates
+LichessAPI::makeMove(gameId, uciMove)  // Send player's move
+```

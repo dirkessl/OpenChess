@@ -1,4 +1,5 @@
 #include "wifi_manager_esp32.h"
+#include "chess_lichess.h"
 #include "chess_utils.h"
 #include "page_router.h"
 #include <Arduino.h>
@@ -6,7 +7,7 @@
 
 static const char* INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-WiFiManagerESP32::WiFiManagerESP32(BoardDriver* bd) : boardDriver(bd), server(AP_PORT), wifiSSID(SECRET_SSID), wifiPassword(SECRET_PASS), gameMode("0"), botConfig(), currentFen(INITIAL_FEN), hasPendingEdit(false), boardEvaluation(0.0f) {}
+WiFiManagerESP32::WiFiManagerESP32(BoardDriver* bd) : boardDriver(bd), server(AP_PORT), wifiSSID(SECRET_SSID), wifiPassword(SECRET_PASS), gameMode("0"), lichessToken(""), botConfig(), currentFen(INITIAL_FEN), hasPendingEdit(false), boardEvaluation(0.0f) {}
 
 void WiFiManagerESP32::begin() {
   Serial.println("=== Starting OpenChess WiFi Manager (ESP32) ===");
@@ -17,6 +18,14 @@ void WiFiManagerESP32::begin() {
     wifiSSID = prefs.getString("ssid", SECRET_SSID);
     wifiPassword = prefs.getString("pass", SECRET_PASS);
     prefs.end();
+
+    // Load Lichess token
+    prefs.begin("lichess", true);
+    lichessToken = prefs.getString("token", "");
+    prefs.end();
+    if (lichessToken.length() > 0) {
+      Serial.println("Lichess API token loaded from NVS");
+    }
   }
   if (!WiFi.softAP(AP_SSID, AP_PASSWORD)) {
     Serial.println("ERROR: Failed to create Access Point!");
@@ -45,6 +54,8 @@ void WiFiManagerESP32::begin() {
   server.on("/wifi-info", HTTP_GET, [this](AsyncWebServerRequest* request) { request->send(200, "application/json", this->getWiFiInfoJSON()); });
   server.on("/connect-wifi", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleConnectWiFi(request); });
   server.on("/gameselect", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleGameSelection(request); });
+  server.on("/lichess-info", HTTP_GET, [this](AsyncWebServerRequest* request) { request->send(200, "application/json", this->getLichessInfoJSON()); });
+  server.on("/save-lichess-token", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleSaveLichessToken(request); });
   server.onNotFound([](AsyncWebServerRequest* request) {
     const Page* page = findPage(request->url().c_str());
     if (!page) {
@@ -146,8 +157,64 @@ void WiFiManagerESP32::handleGameSelection(AsyncWebServerRequest* request) {
       return;
     }
   }
+  // If Lichess mode, verify token exists
+  if (mode == 4) {
+    if (lichessToken.length() == 0) {
+      request->send(400, "text/plain", "No Lichess API token configured");
+      return;
+    }
+    Serial.println("Lichess mode selected via web");
+  }
   Serial.println("Game mode selected via web: " + gameMode);
   request->send(200, "text/plain", "OK");
+}
+
+String WiFiManagerESP32::getLichessInfoJSON() {
+  String hasToken = (lichessToken.length() > 0) ? "true" : "false";
+  // Don't expose the actual token, just whether it exists and a masked version
+  String maskedToken = "";
+  if (lichessToken.length() > 8) {
+    maskedToken = lichessToken.substring(0, 4) + "..." + lichessToken.substring(lichessToken.length() - 4);
+  } else if (lichessToken.length() > 0) {
+    maskedToken = "****";
+  }
+  return "{\"hasToken\":" + hasToken + ",\"maskedToken\":\"" + maskedToken + "\"}";
+}
+
+void WiFiManagerESP32::handleSaveLichessToken(AsyncWebServerRequest* request) {
+  if (!request->hasArg("token")) {
+    request->send(400, "text/plain", "Missing token parameter");
+    return;
+  }
+
+  String newToken = request->arg("token");
+  newToken.trim();
+
+  if (newToken.length() < 10) {
+    request->send(400, "text/plain", "Token too short");
+    return;
+  }
+
+  // Save to NVS
+  if (!ChessUtils::ensureNvsInitialized()) {
+    request->send(500, "text/plain", "NVS init failed");
+    return;
+  }
+
+  prefs.begin("lichess", false);
+  prefs.putString("token", newToken);
+  prefs.end();
+
+  lichessToken = newToken;
+  Serial.println("Lichess API token saved to NVS");
+
+  request->send(200, "text/plain", "OK");
+}
+
+LichessConfig WiFiManagerESP32::getLichessConfig() {
+  LichessConfig config;
+  config.apiToken = lichessToken;
+  return config;
 }
 
 void WiFiManagerESP32::updateBoardState(const String& fen, float evaluation) {

@@ -15,22 +15,21 @@ class ChessBot : public ChessGame {
  private:
   BotConfig botConfig;
 
-  bool wifiConnected;
-  float currentEvaluation; // Stockfish evaluation (in pawns, positive = white advantage)
-
-  // WiFi and API
+  // WiFi and API (Stockfish-specific)
   String makeStockfishRequest(String fen);
   bool parseStockfishResponse(String response, String& bestMove, float& evaluation);
 
-  // Move handling
-  void executeBotMove(int fromRow, int fromCol, int toRow, int toCol);
-
-  // Game flow
+  // Game flow (Stockfish-specific)
   void makeBotMove();
-  void showBotThinking();
-  void showBotMoveIndicator(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant = false, int enPassantCapturedPawnRow = -1);
-  void waitForBotMoveCompletion(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant = false, int enPassantCapturedPawnRow = -1);
-  void waitForBotCastlingCompletion(int kingFromRow, int kingFromCol, int kingToRow, int kingToCol);
+
+ protected:
+  bool wifiConnected;
+  float currentEvaluation; // Evaluation (in pawns, positive = white advantage)
+
+  // Move handling - shared with subclasses (e.g., ChessLichess)
+  void executeOpponentMove(int fromRow, int fromCol, int toRow, int toCol);
+  void showOpponentMoveIndicator(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant = false, int enPassantCapturedPawnRow = -1);
+  void waitForOpponentMoveCompletion(int fromRow, int fromCol, int toRow, int toCol, bool isCapture, bool isEnPassant = false, int enPassantCapturedPawnRow = -1);
 
  public:
   ChessBot(BoardDriver* bd, ChessEngine* ce, WiFiManagerESP32* wm, BotConfig cfg);

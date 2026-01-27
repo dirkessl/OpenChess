@@ -22,6 +22,11 @@
                 <p>(Stockfish)</p>
             </div>
             <div class="game-mode available mode-3" onclick="selectGame(3)">
+                <h3>Lichess</h3>
+                <p>Play online games</p>
+                <p>on your physical board</p>
+            </div>
+            <div class="game-mode available mode-4" onclick="selectGame(4)">
                 <h3>Sensor Test</h3>
                 <p>Test board sensors</p>
             </div>
@@ -72,7 +77,7 @@
         }
 
         function selectGame(mode) {
-            if (mode === 1 || mode === 2 || mode === 3) {
+            if (mode === 1 || mode === 2 || mode === 3 || mode === 4) {
                 requestBody = 'gamemode=' + mode;
                 if (mode === 2)
                     requestBody += '&playerColor=' + document.getElementById('botPlayerColor').value + '&difficulty=' + document.getElementById('botDifficulty').value;
@@ -82,8 +87,18 @@
                         'Content-Type': 'application/x-www-form-urlencoded'
                     },
                     body: requestBody
-                }).then(response => response.text()).then(data => {
-                    if (mode != 3) // Don't redirect for sensor test
+                }).then(response => {
+                    if (!response.ok) {
+                        if (mode === 3) {
+                            alert('Please configure your Lichess API token in the Home page settings first.');
+                        } else {
+                            alert('Failed to select game mode. Please try again.');
+                        }
+                        return;
+                    }
+                    return response.text();
+                }).then(data => {
+                    if (data && mode != 4) // Don't redirect for sensor test
                         window.location.href = "/board";
                 }).catch(error => {
                     console.error('Error:', error);

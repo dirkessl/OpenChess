@@ -143,13 +143,13 @@ input[type="submit"]:hover,
 }
 
 .game-mode.mode-3 {
-    border-color: #2196F3;
-    background: linear-gradient(135deg, #444 0%, #2196F3 100%);
+    border-color: #b551dd;
+    background: linear-gradient(135deg, #444 0%, #b551dd 100%);
 }
 
 .game-mode.mode-4 {
-    border-color: #F44336;
-    background: linear-gradient(135deg, #444 0%, #F44336 100%);
+    border-color: #f44336;
+    background: linear-gradient(135deg, #444 0%, #f44336 100%);
 }
 
 .game-mode h3 {
@@ -394,4 +394,67 @@ input[type="submit"]:hover,
     font-weight: bold;
     text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
     transition: color 0.8s ease;
+}
+
+/* Collapsible Settings Sections */
+.settings-section {
+    background-color: #3a3939;
+    border: 2px solid #555;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.section-header:hover {
+    background-color: #444;
+}
+
+.section-header h3 {
+    margin: 0;
+    flex: 1;
+    text-align: left;
+    font-size: 18px;
+}
+
+.section-icon {
+    color: #ec8703;
+    font-size: 14px;
+    margin-right: 10px;
+    transition: transform 0.3s ease;
+}
+
+.section-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.4s ease;
+    padding: 0 15px;
+}
+
+.section-content.expanded {
+    max-height: 500px;
+    padding: 0 15px 15px 15px;
+}
+
+.section-description {
+    color: #aaa;
+    font-size: 14px;
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.lichess-status {
+    background-color: #444;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    text-align: center;
+    font-weight: bold;
 }

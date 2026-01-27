@@ -1,8 +1,10 @@
 #include "board_driver.h"
 #include "chess_bot.h"
 #include "chess_engine.h"
+#include "chess_lichess.h"
 #include "chess_moves.h"
 #include "chess_utils.h"
+#include "led_colors.h"
 #include "sensor_test.h"
 #include "wifi_manager_esp32.h"
 
@@ -16,16 +18,19 @@ enum GameMode {
   MODE_SELECTION = 0,
   MODE_CHESS_MOVES = 1,
   MODE_BOT = 2,
-  MODE_SENSOR_TEST = 3
+  MODE_LICHESS = 3,
+  MODE_SENSOR_TEST = 4
 };
 
 BotConfig botConfig = {StockfishSettings::medium(), true};
+LichessConfig lichessConfig = {""};
 
 BoardDriver boardDriver;
 ChessEngine chessEngine;
 WiFiManager wifiManager(&boardDriver);
 ChessMoves chessMoves(&boardDriver, &chessEngine, &wifiManager);
 ChessBot* chessBot = nullptr;
+ChessLichess* chessLichess = nullptr;
 SensorTest sensorTest(&boardDriver);
 
 GameMode currentMode = MODE_SELECTION;
@@ -57,10 +62,11 @@ void setup() {
   Serial.println();
   Serial.println("=== Game Selection Mode ===");
   showGameSelection();
-  Serial.println("Three LEDs are lit in the center of the board:");
-  Serial.println("Gold:  Chess Moves (Human vs Human)");
-  Serial.println("White: Chess Bot (Human vs AI)");
-  Serial.println("Red:   Sensor Test");
+  Serial.println("Four LEDs are lit in the center of the board:");
+  Serial.println("Gold:   Chess Moves (Human vs Human)");
+  Serial.println("White:  Chess Bot (Human vs AI)");
+  Serial.println("Purple: Lichess (Play online games)");
+  Serial.println("Red:    Sensor Test");
   Serial.println();
   Serial.println("Place any chess piece on a LED to select that mode");
   Serial.println("================================================");
@@ -78,6 +84,9 @@ void loop() {
     } else if (currentMode == MODE_BOT && modeInitialized && chessBot != nullptr) {
       chessBot->setBoardStateFromFEN(editFen);
       Serial.println("Board edit applied to Chess Bot mode");
+    } else if (currentMode == MODE_LICHESS && modeInitialized && chessLichess != nullptr) {
+      chessLichess->setBoardStateFromFEN(editFen);
+      Serial.println("Board edit applied to Lichess mode");
     } else {
       Serial.println("Warning: Board edit received but no active game mode");
     }
@@ -98,6 +107,10 @@ void loop() {
         botConfig = wifiManager.getBotConfig();
         break;
       case 3:
+        currentMode = MODE_LICHESS;
+        lichessConfig = wifiManager.getLichessConfig();
+        break;
+      case 4:
         currentMode = MODE_SENSOR_TEST;
         break;
       default:
@@ -138,6 +151,14 @@ void loop() {
           chessBot->update();
       }
       break;
+    case MODE_LICHESS:
+      if (chessLichess != nullptr) {
+        if (chessLichess->isGameOver())
+          showGameSelection();
+        else
+          chessLichess->update();
+      }
+      break;
     case MODE_SENSOR_TEST:
       sensorTest.update();
       break;
@@ -156,21 +177,25 @@ void loop() {
 void showGameSelection() {
   currentMode = MODE_SELECTION;
   modeInitialized = false;
-  boardDriver.clearAllLEDs();
-  // Light up the 3 selector positions in the middle of the board
+  boardDriver.acquireLEDs();
+  boardDriver.clearAllLEDs(false);
+  // Light up the 4 selector positions in the middle of the board
   // Each mode has a different color for easy identification
   // Position 1: Chess Moves (row 3, col 3) - Orange
   boardDriver.setSquareLED(3, 3, 255, 165, 0);
   // Position 2: Chess Bot (row 3, col 4) - White
   boardDriver.setSquareLED(3, 4, 0, 0, 0, 255);
-  // Position 3: Sensor Test (row 4, col 4) - Red
+  // Position 3: Lichess (row 4, col 3) - Purple
+  boardDriver.setSquareLED(4, 3, LedColors::Purple.r, LedColors::Purple.g, LedColors::Purple.b);
+  // Position 4: Sensor Test (row 4, col 4) - Red
   boardDriver.setSquareLED(4, 4, 255, 0, 0);
   boardDriver.showLEDs();
+  boardDriver.releaseLEDs();
 }
 
 void handleGameSelection() {
   boardDriver.readSensors();
-  bool currState[3] = {boardDriver.getSensorState(3, 3), boardDriver.getSensorState(3, 4), boardDriver.getSensorState(4, 4)};
+  bool currState[4] = {boardDriver.getSensorState(3, 3), boardDriver.getSensorState(3, 4), boardDriver.getSensorState(4, 3), boardDriver.getSensorState(4, 4)};
 
   struct SelectorState {
     int emptyCount;
@@ -178,17 +203,17 @@ void handleGameSelection() {
     bool readyForSelection;
   };
   const int DEBOUNCE_CYCLES = (DEBOUNCE_MS / SENSOR_READ_DELAY_MS) + 2;
-  static SelectorState selectorStates[3] = {};
+  static SelectorState selectorStates[4] = {};
   static bool initializedStates = false;
   if (!initializedStates) {
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
       selectorStates[i].emptyCount = 0;
       selectorStates[i].occupiedCount = 0;
       selectorStates[i].readyForSelection = false;
     }
     initializedStates = true;
   }
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 4; ++i) {
     if (!currState[i]) {
       if (selectorStates[i].emptyCount < DEBOUNCE_CYCLES)
         selectorStates[i].emptyCount++;
@@ -207,7 +232,7 @@ void handleGameSelection() {
   }
 
   // Check for valid rising edge (empty for DEBOUNCE_CYCLES, then occupied for DEBOUNCE_CYCLES)
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 4; ++i) {
     if (selectorStates[i].readyForSelection && selectorStates[i].occupiedCount >= DEBOUNCE_CYCLES) {
       switch (i) {
         case 0:
@@ -224,6 +249,21 @@ void handleGameSelection() {
           handleBotConfigSelection();
           break;
         case 2:
+          Serial.println("Mode: 'Lichess' Selected!");
+          currentMode = MODE_LICHESS;
+          modeInitialized = false;
+          boardDriver.clearAllLEDs();
+          // Get Lichess token from WiFiManager
+          lichessConfig = wifiManager.getLichessConfig();
+          if (lichessConfig.apiToken.length() == 0) {
+            Serial.println("ERROR: No Lichess API token configured!");
+            Serial.println("Please set your Lichess API token via the web interface.");
+            boardDriver.flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
+            showGameSelection();
+            return;
+          }
+          break;
+        case 3:
           Serial.println("Mode: 'Sensor Test' Selected!");
           currentMode = MODE_SENSOR_TEST;
           modeInitialized = false;
@@ -253,6 +293,15 @@ void initializeSelectedMode(GameMode mode) {
       chessBot = new ChessBot(&boardDriver, &chessEngine, &wifiManager, botConfig);
       chessBot->begin();
       break;
+    case MODE_LICHESS:
+      Serial.println("Starting 'Lichess Mode'...");
+      // Clean up any existing lichess instance
+      if (chessLichess != nullptr)
+        delete chessLichess;
+      // Create new lichess game with current configuration
+      chessLichess = new ChessLichess(&boardDriver, &chessEngine, &wifiManager, lichessConfig);
+      chessLichess->begin();
+      break;
     case MODE_SENSOR_TEST:
       Serial.println("Starting 'Sensor Test'...");
       sensorTest.begin();
@@ -264,8 +313,6 @@ void initializeSelectedMode(GameMode mode) {
 }
 
 void handleBotConfigSelection() {
-  boardDriver.clearAllLEDs();
-
   Serial.println("====== Bot Configuration Selection ======");
   Serial.println("Select Bot Color:");
   Serial.println("- Rank 6: Bot is Black");
@@ -277,6 +324,7 @@ void handleBotConfigSelection() {
   Serial.println("- File H: Expert");
   Serial.println("Example: Place piece at Rank 3, File D = White Bot Medium");
 
+  boardDriver.acquireLEDs();
   // Easy (col 1) - Green
   boardDriver.setSquareLED(2, 1, LedColors::Green.r, LedColors::Green.g, LedColors::Green.b);
   boardDriver.setSquareLED(5, 1, LedColors::Green.r, LedColors::Green.g, LedColors::Green.b);
@@ -294,6 +342,7 @@ void handleBotConfigSelection() {
   boardDriver.setSquareLED(5, 7, LedColors::Purple.r, LedColors::Purple.g, LedColors::Purple.b);
 
   boardDriver.showLEDs();
+  boardDriver.releaseLEDs();
 
   // Wait for selection
   Serial.println("Waiting for bot configuration selection...");

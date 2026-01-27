@@ -1,0 +1,241 @@
+#include "chess_lichess.h"
+#include "chess_utils.h"
+#include "led_colors.h"
+#include "wifi_manager_esp32.h"
+#include <Arduino.h>
+
+// Dummy BotConfig for parent constructor (not used in Lichess mode)
+static BotConfig dummyBotConfig = {StockfishSettings::medium(), false};
+
+ChessLichess::ChessLichess(BoardDriver* bd, ChessEngine* ce, WiFiManagerESP32* wm, LichessConfig cfg)
+    : ChessBot(bd, ce, wm, dummyBotConfig),
+      lichessConfig(cfg),
+      currentGameId(""),
+      myColor('w'),
+      gameActive(false),
+      waitingForGame(true),
+      lastKnownMoves(""),
+      lastSentMove(""),
+      lastPollTime(0) {}
+
+void ChessLichess::begin() {
+  Serial.println("=== Starting Lichess Mode ===");
+
+  // Set the API token
+  LichessAPI::setToken(lichessConfig.apiToken);
+
+  // Verify the token
+  String username;
+  if (!LichessAPI::verifyToken(username)) {
+    Serial.println("ERROR: Invalid Lichess API token!");
+    boardDriver->flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
+    gameOver = true;
+    return;
+  }
+
+  Serial.println("Logged in as: " + username);
+  Serial.println("Waiting for a Lichess game to start...");
+  Serial.println("Start a game on lichess.org or accept a challenge!");
+  Serial.println("====================================");
+
+  waitingForGame = true;
+  gameActive = false;
+
+  // Wait for a game to start
+  waitForLichessGame();
+}
+
+void ChessLichess::waitForLichessGame() {
+  Serial.println("Searching for active Lichess games...");
+  std::atomic<bool>* stopAnimation = boardDriver->startWaitingAnimation();
+  LichessEvent event;
+  event.type = LichessEventType::UNKNOWN;
+  while (waitingForGame && !gameOver) {
+    if (!LichessAPI::pollForGameEvent(event) || event.type != LichessEventType::GAME_START) {
+      delay(1000);
+      continue;
+    }
+    break;
+  }
+  stopAnimation->store(true);
+  currentGameId = event.gameId;
+  myColor = event.myColor;
+
+  Serial.println("=== Game Found! ===");
+  Serial.println("Game ID: " + currentGameId);
+  Serial.printf("Playing as: %s\n", myColor == 'w' ? "White" : "Black");
+
+  // Get full game state
+  LichessGameState state;
+  state.myColor = myColor;
+  state.gameId = currentGameId;
+  state.fen = event.fen; // Use FEN from initial event as fallback
+
+  if (LichessAPI::pollGameStream(currentGameId, state)) {
+    Serial.println("Got full game state from stream");
+  } else {
+    // Fallback: Use data from the initial event
+    Serial.println("Warning: Could not get full game state, using initial event data");
+    state.gameStarted = true;
+    state.gameEnded = false;
+    state.lastMove = "";
+    // Determine turn from FEN (6th field) or assume white starts
+    if (event.fen.length() > 0) {
+      int spaceCount = 0;
+      for (size_t i = 0; i < event.fen.length(); i++) {
+        if (event.fen[i] == ' ') spaceCount++;
+        if (spaceCount == 1) {
+          state.isMyTurn = (event.fen[i + 1] == 'w' && myColor == 'w') || (event.fen[i + 1] == 'b' && myColor == 'b');
+          break;
+        }
+      }
+    } else {
+      state.isMyTurn = (myColor == 'w'); // White moves first
+    }
+  }
+
+  // Sync the board with the current game state
+  syncBoardWithLichess(state);
+
+  waitingForGame = false;
+  gameActive = true;
+
+  // Wait for board setup with the current position
+  waitForBoardSetup(board);
+
+  Serial.println("Board synchronized! Game starting...");
+  wifiManager->updateBoardState(ChessUtils::boardToFEN(board, currentTurn, chessEngine), 0);
+}
+
+void ChessLichess::syncBoardWithLichess(const LichessGameState& state) {
+  initializeBoard();
+
+  myColor = state.myColor;
+  currentGameId = state.gameId;
+
+  // If FEN is provided, use it directly
+  if (state.fen.length() > 0 && state.fen != "startpos") {
+    ChessUtils::fenToBoard(state.fen, board, currentTurn, chessEngine);
+    Serial.println("Board synced from FEN: " + state.fen);
+  } else {
+    Serial.println("No FEN provided, assuming starting position.");
+  }
+  lastKnownMoves = "";
+  currentTurn = state.isMyTurn ? myColor : (myColor == 'w' ? 'b' : 'w');
+
+  Serial.printf("My color: %s, Is my turn: %s\n", myColor == 'w' ? "White" : "Black", state.isMyTurn ? "Yes" : "No");
+}
+
+void ChessLichess::update() {
+  static std::atomic<bool>* stopAnimation = nullptr;
+  if (gameOver || !gameActive)
+    return;
+
+  boardDriver->readSensors();
+
+  int fromRow, fromCol, toRow, toCol;
+  char piece;
+  if ((currentTurn == myColor) && tryPlayerMove(myColor, fromRow, fromCol, toRow, toCol, piece)) {
+    // Player's turn - handle physical move
+    char promotion = ' ';
+    if (chessEngine->isPawnPromotion(piece, toRow))
+      promotion = (myColor == 'w') ? 'Q' : 'q';
+    // Process locally FIRST - show animations immediately
+    processPlayerMove(fromRow, fromCol, toRow, toCol, piece);
+    updateGameStatus();
+    wifiManager->updateBoardState(ChessUtils::boardToFEN(board, currentTurn, chessEngine), 0);
+    if (stopAnimation == nullptr && !gameOver)
+      stopAnimation = boardDriver->startThinkingAnimation();
+    // Then send move to Lichess (blocking)
+    sendMoveToLichess(fromRow, fromCol, toRow, toCol, promotion);
+    boardDriver->updateSensorPrev();
+    return;
+  }
+
+  // Polling interval check
+  if ((currentTurn == myColor) || millis() - lastPollTime < POLL_INTERVAL_MS) {
+    boardDriver->updateSensorPrev();
+    return;
+  }
+  lastPollTime = millis();
+
+  // Opponent's turn - poll Lichess for updates
+  LichessGameState state;
+  state.myColor = myColor;
+  state.gameId = currentGameId;
+  if (LichessAPI::pollGameStream(currentGameId, state)) {
+    if (state.gameEnded) {
+      Serial.println("Game ended! Status: " + state.status);
+      if (state.winner.length() > 0) {
+        Serial.println("Winner: " + state.winner);
+      }
+      if (stopAnimation) {
+        stopAnimation->store(true);
+        stopAnimation = nullptr;
+      }
+      boardDriver->fireworkAnimation();
+      gameOver = true;
+      return;
+    }
+    // Check if there's a new move
+    if (state.lastMove.length() > 0 && state.lastMove != lastKnownMoves) {
+      lastKnownMoves = state.lastMove;
+      // Skip if this is the move we just sent (avoid processing our own move)
+      if (state.lastMove == lastSentMove) {
+        Serial.println("Skipping own move echo: " + state.lastMove);
+        lastSentMove = "";
+      } else {
+        if (stopAnimation) {
+          stopAnimation->store(true);
+          stopAnimation = nullptr;
+        }
+        Serial.println("Lichess move received: " + state.lastMove);
+        // Process the opponent's move
+        processLichessMove(state.lastMove);
+        updateGameStatus();
+        wifiManager->updateBoardState(ChessUtils::boardToFEN(board, currentTurn, chessEngine), 0);
+      }
+    }
+  }
+  boardDriver->updateSensorPrev();
+}
+
+void ChessLichess::sendMoveToLichess(int fromRow, int fromCol, int toRow, int toCol, char promotion) {
+  String uciMove = LichessAPI::toUCIMove(fromRow, fromCol, toRow, toCol, promotion);
+  Serial.println("Sending move to Lichess: " + uciMove);
+
+  // Track this move so we don't process it as an opponent move when it echoes back
+  lastSentMove = uciMove;
+
+  if (!LichessAPI::makeMove(currentGameId, uciMove)) {
+    Serial.println("ERROR: Failed to send move to Lichess!");
+    boardDriver->blinkSquare(fromRow, fromCol, LedColors::Red.r, LedColors::Red.g, LedColors::Red.b, 3);
+    lastSentMove = "";
+  }
+}
+
+void ChessLichess::processLichessMove(const String& uciMove) {
+  int fromRow, fromCol, toRow, toCol;
+  char promotion;
+
+  if (!LichessAPI::parseUCIMove(uciMove, fromRow, fromCol, toRow, toCol, promotion)) {
+    Serial.println("ERROR: Failed to parse Lichess move: " + uciMove);
+    return;
+  }
+
+  Serial.printf("Lichess move: %s -> Array coords: (%d,%d) to (%d,%d)\n", uciMove.c_str(), fromRow, fromCol, toRow, toCol);
+
+  executeLichessOpponentMove(fromRow, fromCol, toRow, toCol, promotion);
+}
+
+void ChessLichess::executeLichessOpponentMove(int fromRow, int fromCol, int toRow, int toCol, char promotion) {
+  char piece = board[fromRow][fromCol];
+
+  // Handle promotion - modify the piece before calling the parent's executeOpponentMove
+  if (promotion != ' ' && promotion != '\0') {
+    board[fromRow][fromCol] = promotion;
+  }
+
+  // Use parent's executeOpponentMove for the actual move handling
+  executeOpponentMove(fromRow, fromCol, toRow, toCol);
+}
