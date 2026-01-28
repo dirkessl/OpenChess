@@ -231,9 +231,15 @@ float ChessUtils::evaluatePosition(const char board[8][8]) {
 
 bool ChessUtils::ensureNvsInitialized() {
   esp_err_t err = nvs_flash_init();
-  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+  if (err != ESP_OK) {
+    Serial.printf("[NVS] Init failed with error 0x%x, erasing and retrying...\n", err);
     nvs_flash_erase();
     err = nvs_flash_init();
+    if (err == ESP_OK) {
+      Serial.println("[NVS] Successfully initialized after erase");
+    } else {
+      Serial.printf("[NVS] Still failed after erase: 0x%x\n", err);
+    }
   }
   return err == ESP_OK;
 }

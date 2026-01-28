@@ -14,14 +14,18 @@ void WiFiManagerESP32::begin() {
   if (!ChessUtils::ensureNvsInitialized()) {
     Serial.println("NVS init failed - WiFi credentials not loaded");
   } else {
-    prefs.begin("wifiCreds", true);
-    wifiSSID = prefs.getString("ssid", SECRET_SSID);
-    wifiPassword = prefs.getString("pass", SECRET_PASS);
+    prefs.begin("wifiCreds", false);
+    if (prefs.isKey("ssid")) {
+      wifiSSID = prefs.getString("ssid", SECRET_SSID);
+      wifiPassword = prefs.getString("pass", SECRET_PASS);
+    }
     prefs.end();
 
     // Load Lichess token
-    prefs.begin("lichess", true);
-    lichessToken = prefs.getString("token", "");
+    prefs.begin("lichess", false);
+    if (prefs.isKey("token")) {
+      lichessToken = prefs.getString("token", "");
+    }
     prefs.end();
     if (lichessToken.length() > 0) {
       Serial.println("Lichess API token loaded from NVS");

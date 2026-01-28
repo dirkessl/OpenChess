@@ -61,7 +61,7 @@ else:
             run(f'cleancss -O2 "{f}" -o "{out}"')
 
         elif f.suffix == ".js":
-            run(f'terser "{f}" -c -m -o "{out}"')
+            run(f'terser "{f}" --compress --mangle --comments false --ecma 2020 --toplevel -o "{out}"')
 
         else:
             shutil.copy(f, out)

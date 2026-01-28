@@ -133,9 +133,9 @@ void loop() {
   if (!modeInitialized) {
     initializeSelectedMode(currentMode);
     modeInitialized = true;
+    delay(1); // HACK: Ensure any starting animations acquire the LED mutex before proceeding
   }
 
-  bool gameEnded = false;
   switch (currentMode) {
     case MODE_CHESS_MOVES:
       if (chessMoves.isGameOver())
@@ -182,13 +182,13 @@ void showGameSelection() {
   // Light up the 4 selector positions in the middle of the board
   // Each mode has a different color for easy identification
   // Position 1: Chess Moves (row 3, col 3) - Orange
-  boardDriver.setSquareLED(3, 3, 255, 165, 0);
+  boardDriver.setSquareLED(3, 3, LedColors::Orange.r, LedColors::Orange.g, LedColors::Orange.b);
   // Position 2: Chess Bot (row 3, col 4) - White
-  boardDriver.setSquareLED(3, 4, 0, 0, 0, 255);
+  boardDriver.setSquareLED(3, 4, LedColors::White.r, LedColors::White.g, LedColors::White.b);
   // Position 3: Lichess (row 4, col 3) - Purple
   boardDriver.setSquareLED(4, 3, LedColors::Purple.r, LedColors::Purple.g, LedColors::Purple.b);
   // Position 4: Sensor Test (row 4, col 4) - Red
-  boardDriver.setSquareLED(4, 4, 255, 0, 0);
+  boardDriver.setSquareLED(4, 4, LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
   boardDriver.showLEDs();
   boardDriver.releaseLEDs();
 }
@@ -253,15 +253,7 @@ void handleGameSelection() {
           currentMode = MODE_LICHESS;
           modeInitialized = false;
           boardDriver.clearAllLEDs();
-          // Get Lichess token from WiFiManager
           lichessConfig = wifiManager.getLichessConfig();
-          if (lichessConfig.apiToken.length() == 0) {
-            Serial.println("ERROR: No Lichess API token configured!");
-            Serial.println("Please set your Lichess API token via the web interface.");
-            boardDriver.flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
-            showGameSelection();
-            return;
-          }
           break;
         case 3:
           Serial.println("Mode: 'Sensor Test' Selected!");

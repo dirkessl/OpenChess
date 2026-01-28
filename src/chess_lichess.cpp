@@ -21,13 +21,25 @@ ChessLichess::ChessLichess(BoardDriver* bd, ChessEngine* ce, WiFiManagerESP32* w
 void ChessLichess::begin() {
   Serial.println("=== Starting Lichess Mode ===");
 
-  // Set the API token
-  LichessAPI::setToken(lichessConfig.apiToken);
+  if (!wifiManager->connectToWiFi(wifiManager->getWiFiSSID(), wifiManager->getWiFiPassword())) {
+    Serial.println("Failed to connect to WiFi. Lichess mode unavailable.");
+    boardDriver->flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
+    gameOver = true;
+    return;
+  }
 
-  // Verify the token
+  if (lichessConfig.apiToken.length() == 0) {
+    Serial.println("No Lichess API token configured!");
+    Serial.println("Please set your Lichess API token via the web interface.");
+    boardDriver->flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
+    gameOver = true;
+    return;
+  }
+
   String username;
+  LichessAPI::setToken(lichessConfig.apiToken);
   if (!LichessAPI::verifyToken(username)) {
-    Serial.println("ERROR: Invalid Lichess API token!");
+    Serial.println("Invalid Lichess API token!");
     boardDriver->flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
     gameOver = true;
     return;

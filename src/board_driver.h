@@ -130,7 +130,7 @@ class BoardDriver {
 
   bool loadCalibration();
   void saveCalibration();
-  void runCalibration();
+  bool runCalibration();
   void readRawSensors(bool rawState[NUM_ROWS][NUM_COLS]);
   bool waitForBoardEmpty();
   bool waitForSingleRawPress(int& rawRow, int& rawCol, unsigned long stableMs = 200);

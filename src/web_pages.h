@@ -6,6 +6,12 @@
 extern const uint8_t BOARD_HTML_GZ[];
 extern const size_t BOARD_HTML_GZ_LEN;
 
+extern const uint8_t CHESSBOARD_1_0_0_MIN_CSS_GZ[];
+extern const size_t CHESSBOARD_1_0_0_MIN_CSS_GZ_LEN;
+
+extern const uint8_t STYLES_CSS_GZ[];
+extern const size_t STYLES_CSS_GZ_LEN;
+
 extern const uint8_t GAME_HTML_GZ[];
 extern const size_t GAME_HTML_GZ_LEN;
 
@@ -48,13 +54,16 @@ extern const size_t WQ_SVG_GZ_LEN;
 extern const uint8_t WR_SVG_GZ[];
 extern const size_t WR_SVG_GZ_LEN;
 
+extern const uint8_t CHESSBOARD_1_0_0_MIN_JS_GZ[];
+extern const size_t CHESSBOARD_1_0_0_MIN_JS_GZ_LEN;
+
+extern const uint8_t JQUERY_4_0_0_MIN_JS_GZ[];
+extern const size_t JQUERY_4_0_0_MIN_JS_GZ_LEN;
+
 extern const uint8_t CAPTURE_NOGZ_MP3[];
 extern const size_t CAPTURE_NOGZ_MP3_LEN;
 
 extern const uint8_t MOVE_NOGZ_MP3[];
 extern const size_t MOVE_NOGZ_MP3_LEN;
-
-extern const uint8_t STYLES_CSS_GZ[];
-extern const size_t STYLES_CSS_GZ_LEN;
 
 #endif

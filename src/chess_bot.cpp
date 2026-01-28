@@ -5,7 +5,7 @@
 #include "wifi_manager_esp32.h"
 #include <Arduino.h>
 
-ChessBot::ChessBot(BoardDriver* bd, ChessEngine* ce, WiFiManagerESP32* wm, BotConfig cfg) : ChessGame(bd, ce, wm), botConfig(cfg), wifiConnected(false), currentEvaluation(0.0) {}
+ChessBot::ChessBot(BoardDriver* bd, ChessEngine* ce, WiFiManagerESP32* wm, BotConfig cfg) : ChessGame(bd, ce, wm), botConfig(cfg), currentEvaluation(0.0) {}
 
 void ChessBot::begin() {
   Serial.println("=== Starting Chess Bot Mode ===");
@@ -14,19 +14,18 @@ void ChessBot::begin() {
   Serial.printf("Bot Difficulty: Depth %d, Timeout %dms\n", botConfig.stockfishSettings.depth, botConfig.stockfishSettings.timeoutMs);
   Serial.println("====================================");
   if (wifiManager->connectToWiFi(wifiManager->getWiFiSSID(), wifiManager->getWiFiPassword())) {
-    Serial.println("WiFi connected! Bot mode ready.");
-    wifiConnected = true;
     initializeBoard();
     waitForBoardSetup();
   } else {
-    boardDriver->flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
     Serial.println("Failed to connect to WiFi. Bot mode unavailable.");
-    wifiConnected = false;
+    boardDriver->flashBoardAnimation(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b);
+    gameOver = true;
+    return;
   }
 }
 
 void ChessBot::update() {
-  if (!wifiConnected || gameOver)
+  if (gameOver)
     return;
 
   boardDriver->readSensors();

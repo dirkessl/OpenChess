@@ -68,8 +68,10 @@ void BoardDriver::begin() {
 
   // Load calibration or run first-time calibration
   if (!loadCalibration()) {
-    runCalibration();
-    saveCalibration();
+    bool wasSkipped = runCalibration();
+    if (!wasSkipped) {
+      saveCalibration();
+    }
   }
 }
 
@@ -117,7 +119,7 @@ bool BoardDriver::loadCalibration() {
     return false;
   }
   Preferences prefs;
-  prefs.begin("boardCal", true);
+  prefs.begin("boardCal", false);
   uint8_t ver = prefs.getUChar("ver", 0);
   if (ver != 1) {
     prefs.end();
@@ -272,6 +274,7 @@ void BoardDriver::showCalibrationError() {
   for (int i = 0; i < LED_COUNT; i++)
     strip.setPixelColor(i, strip.Color(LedColors::Red.r, LedColors::Red.g, LedColors::Red.b));
   showLEDs();
+  delay(500);
   waitForBoardEmpty();
   clearAllLEDs();
 }
@@ -320,7 +323,7 @@ bool BoardDriver::calibrateAxis(Axis axis, uint8_t* axisPinsOrder, size_t NUM_PI
     if (axis == ColsAxis && expectedRawPin != -1) {
       int actualPin = useRow ? row : col;
       if (actualPin != expectedRawPin) {
-        Serial.printf("Error: Expected piece on %s pin %d but detected on %d. Place piece on %s.\n", useRow ? "row" : "col", expectedRawPin, actualPin, square);
+        Serial.printf("ERROR: Expected piece on %s pin %d but detected on %d. Place piece on %s.\n", useRow ? "row" : "col", expectedRawPin, actualPin, square);
         showCalibrationError();
         i--;
         continue;
@@ -380,15 +383,7 @@ bool BoardDriver::calibrateAxis(Axis axis, uint8_t* axisPinsOrder, size_t NUM_PI
   return axis != detectedAxis;
 }
 
-void BoardDriver::runCalibration() {
-  Serial.println("============== Board calibration required ==============");
-  Serial.println("- Board needs to be empty to begin the calibration");
-  Serial.println("- Follow the prompts to place a single piece");
-  Serial.println("========================================================");
-
-  clearAllLEDs();
-  waitForBoardEmpty();
-
+bool BoardDriver::runCalibration() {
   // Calibration animation - light up each pixel sequentially
   for (int i = 0; i < LED_COUNT; i++) {
     strip.setPixelColor(i, strip.Color(LedColors::White.r, LedColors::White.g, LedColors::White.b));
@@ -398,13 +393,45 @@ void BoardDriver::runCalibration() {
   delay(500);
   clearAllLEDs();
 
+  Serial.println("========================== Board calibration required ==========================");
+  Serial.println("- Type 'skip' within 5 seconds to temporarily skip it (reboot to calibrate later)");
+  Serial.println("  This allows testing the web UI but LEDs and sensors won't have correct mapping");
+  unsigned long startTime = millis();
+  while (millis() - startTime < 5000) {
+    if (Serial.available()) {
+      String input = Serial.readStringUntil('\n');
+      input.trim();
+      input.toLowerCase();
+      if (input == "skip") {
+        Serial.println("[SKIP] Calibration skipped - using default mapping");
+        Serial.println("[SKIP] Sensors/LEDs will NOT work correctly!");
+        Serial.println("[SKIP] You will be asked to calibrate again on next reboot");
+        // Set up identity mapping (no calibration)
+        swapAxes = 0;
+        for (int i = 0; i < NUM_ROWS; i++) toLogicalRow[i] = i;
+        for (int i = 0; i < NUM_COLS; i++) toLogicalCol[i] = i;
+        for (int row = 0; row < NUM_ROWS; row++)
+          for (int col = 0; col < NUM_COLS; col++)
+            ledIndexMap[row][col] = row * NUM_COLS + col;
+        calibrationLoaded = true;
+        return true;
+      } else {
+        Serial.println("Unknown command \"" + input + "\" Type \"skip\" to skip calibration or wait 5 seconds for calibration to begin");
+      }
+    }
+    delay(50);
+  }
+  Serial.println("");
+  Serial.println("- Empty the board to begin the calibration, then follow the prompts to place a single piece");
+  Serial.println("================================================================================");
+  waitForBoardEmpty();
+
   bool swapAxes1 = calibrateAxis(Axis::RowsAxis, toLogicalRow, NUM_ROWS, false);
   bool swapAxes2 = calibrateAxis(Axis::ColsAxis, toLogicalCol, NUM_COLS, swapAxes1);
   if (swapAxes1 != swapAxes2) {
     Serial.println("Inconsistent axis orientation detected during calibration. Restarting calibration.");
     showCalibrationError();
-    runCalibration();
-    return;
+    return runCalibration();
   }
   swapAxes = swapAxes1 ? 1 : 0;
 
@@ -452,6 +479,7 @@ void BoardDriver::runCalibration() {
 
   clearAllLEDs();
   Serial.println("Calibration complete");
+  return false;
 }
 
 void BoardDriver::loadShiftRegister(byte data) {

@@ -4,6 +4,8 @@
 
 static const Page pages[] = {
   { "/board.html", BOARD_HTML_GZ, BOARD_HTML_GZ_LEN, "text/html", true },
+  { "/css/chessboard-1.0.0.min.css", CHESSBOARD_1_0_0_MIN_CSS_GZ, CHESSBOARD_1_0_0_MIN_CSS_GZ_LEN, "text/css", true },
+  { "/css/styles.css", STYLES_CSS_GZ, STYLES_CSS_GZ_LEN, "text/css", true },
   { "/game.html", GAME_HTML_GZ, GAME_HTML_GZ_LEN, "text/html", true },
   { "/", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN, "text/html", true },
   { "/pieces/bB.svg", BB_SVG_GZ, BB_SVG_GZ_LEN, "image/svg+xml", true },
@@ -18,9 +20,10 @@ static const Page pages[] = {
   { "/pieces/wP.svg", WP_SVG_GZ, WP_SVG_GZ_LEN, "image/svg+xml", true },
   { "/pieces/wQ.svg", WQ_SVG_GZ, WQ_SVG_GZ_LEN, "image/svg+xml", true },
   { "/pieces/wR.svg", WR_SVG_GZ, WR_SVG_GZ_LEN, "image/svg+xml", true },
+  { "/scripts/chessboard-1.0.0.min.js", CHESSBOARD_1_0_0_MIN_JS_GZ, CHESSBOARD_1_0_0_MIN_JS_GZ_LEN, "application/javascript", true },
+  { "/scripts/jquery-4.0.0.min.js", JQUERY_4_0_0_MIN_JS_GZ, JQUERY_4_0_0_MIN_JS_GZ_LEN, "application/javascript", true },
   { "/sounds/capture.mp3", CAPTURE_NOGZ_MP3, CAPTURE_NOGZ_MP3_LEN, "audio/mpeg", false },
   { "/sounds/move.mp3", MOVE_NOGZ_MP3, MOVE_NOGZ_MP3_LEN, "audio/mpeg", false },
-  { "/styles.css", STYLES_CSS_GZ, STYLES_CSS_GZ_LEN, "text/css", true },
 };
 
 const Page *findPage(const char *path)

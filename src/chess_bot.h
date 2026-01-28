@@ -23,7 +23,6 @@ class ChessBot : public ChessGame {
   void makeBotMove();
 
  protected:
-  bool wifiConnected;
   float currentEvaluation; // Evaluation (in pawns, positive = white advantage)
 
   // Move handling - shared with subclasses (e.g., ChessLichess)
