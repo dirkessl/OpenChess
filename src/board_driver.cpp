@@ -26,7 +26,7 @@ static constexpr int DefaultRowColToLEDindexMap[NUM_ROWS][NUM_COLS] = {
     {63, 62, 61, 60, 59, 58, 57, 56},
 };
 
-BoardDriver::BoardDriver() : strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800), lastEnabledCol(-1), swapAxes(0), calibrationLoaded(false) {
+BoardDriver::BoardDriver() : strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800), lastEnabledCol(-2), swapAxes(0), calibrationLoaded(false) {
   for (int i = 0; i < NUM_ROWS; i++)
     toLogicalRow[i] = i;
   for (int i = 0; i < NUM_COLS; i++)
@@ -363,23 +363,14 @@ bool BoardDriver::calibrateAxis(Axis axis, uint8_t* axisPinsOrder, size_t NUM_PI
         counts[firstRow]++;
         Serial.printf("%s calibration using rows %s\n", axisToChessRankFile(axis).c_str(), axis != detectedAxis ? "(axis swap)" : "(no axis swap)");
       } else {
-        Serial.printf("\n=== AMBIGUOUS %s CALIBRATION ===\n", axisToChessRankFile(axis).c_str());
+        Serial.printf("\n============== AMBIGUOUS %s CALIBRATION ==============\n", axisToChessRankFile(axis).c_str());
         Serial.printf("First press:  row=%d (GPIO %d), col=%d (74HC595 Q%c, pin %d)\n", firstRow, rowPins[firstRow], firstCol, shiftRegOutput(firstCol), shiftRegPin(firstCol));
         Serial.printf("Second press: row=%d (GPIO %d), col=%d (74HC595 Q%c, pin %d)\n", row, rowPins[row], col, shiftRegOutput(col), shiftRegPin(col));
-        if (row == firstRow && col == firstCol) {
-          // Same square detected twice
-          Serial.println("PROBLEM: Both presses detected by the SAME sensor");
-          Serial.println("Possible causes:");
-          Serial.println("  - You placed the piece on the same square both times");
-          Serial.println("  - Sensor cross-talk/wiring issue: multiple squares trigger the same sensor");
-        } else {
-          // Diagonal - both row and col changed
-          Serial.println("PROBLEM: Both row AND column changed between presses.");
-          Serial.println("Expected: Only ONE axis should change (squares should be in a straight line).");
-          Serial.println("  - You likely placed the second piece diagonally from the first.");
-          Serial.println("    TIP: Pick any corner, then move along the edge (not diagonally).");
-        }
-        Serial.println("================================\n");
+        Serial.printf("PROBLEM: %s\n", (row == firstRow && col == firstCol) ? "Both presses detected by the SAME sensor" : "Both row AND column changed between presses");
+        Serial.println(" - Crosstalk/wiring issue: check if some input row GPIOs or shift-register outputs are connected together");
+        Serial.println(" - Low voltage output on GPIO pins could cause undefined shift register behavior");
+        Serial.println(" - You placed the piece in the same square both times or placed it diagonally?");
+        Serial.println("==========================================================\n");
         showCalibrationError();
         i = -1;
         continue;
@@ -543,22 +534,24 @@ void BoardDriver::loadShiftRegister(byte data, int bits) {
 }
 
 void BoardDriver::disableAllCols() {
-  loadShiftRegister(0);
-  lastEnabledCol = -1;
+  if (lastEnabledCol == 7) {
+    // Sequential wrap-around: shift in a single 0 to push the 1 out of QH
+    loadShiftRegister(0x00, 1);
+  } else {
+    // Non-sequential or startup: load full byte of zeros
+    loadShiftRegister(0);
+  }
+  lastEnabledCol = -1; // Make next enableCol(0) call use optimized 1-bit shift because register is now all zeros
 }
 
 void BoardDriver::enableCol(int col) {
-  if (col == 0 && lastEnabledCol == 7) {
-    // Sequential wrap-around: load a single 1 into QA
-    loadShiftRegister(0x01, 1);
-  } else if (col == 0) {
-    // Initialize scan: load a full byte with only QA high
-    loadShiftRegister(0x01);
-  } else if (col == lastEnabledCol + 1) {
-    // Sequential access: shift in a single 0 to move the 1 we shifted earlier to the next column position (towards QH)
-    loadShiftRegister(0x00, 1);
+  if (col == lastEnabledCol + 1) {
+    if (col == 0)
+      loadShiftRegister(0x01, 1); // Sequential wrap-around: register should be all zeros already, shift in a single 1 bit into QA
+    else
+      loadShiftRegister(0x00, 1); // Sequential access: shift in a single 0 bit to move the 1 we shifted earlier to the next column position (towards QH)
   } else {
-    // Non-sequential access: load full byte (fallback) (never happens, but just in case)
+    // Due to above logic, this condition should never occur, but just in case...
     loadShiftRegister((byte)(1 << col));
   }
   lastEnabledCol = col;
