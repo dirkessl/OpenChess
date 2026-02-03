@@ -1,6 +1,7 @@
 #ifndef BOARD_DRIVER_H
 #define BOARD_DRIVER_H
 
+#include "led_colors.h"
 #include <Adafruit_NeoPixel.h>
 #include <atomic>
 #include <freertos/FreeRTOS.h>

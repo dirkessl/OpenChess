@@ -16,9 +16,9 @@ void SensorTest::update() {
   for (int row = 0; row < 8; row++)
     for (int col = 0; col < 8; col++)
       if (boardDriver->getSensorState(row, col))
-        boardDriver->setSquareLED(row, col, 0, 0, 0, 255);
+        boardDriver->setSquareLED(row, col, LedColors::White);
       else
-        boardDriver->setSquareLED(row, col, 0, 0, 0, 0);
+        boardDriver->setSquareLED(row, col, LedColors::Off);
 
   boardDriver->showLEDs();
 }

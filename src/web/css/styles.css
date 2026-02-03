@@ -128,23 +128,19 @@ input[type="submit"]:hover,
     transform: translateY(-2px);
 }
 
-.game-mode.available {
-    border-color: #4CAF50;
-}
-
 .game-mode.mode-1 {
-    border-color: #FF9800;
-    background: linear-gradient(135deg, #444 0%, #FF9800 100%);
+    border-color: #2196F3;
+    background: linear-gradient(135deg, #444 0%, #2196F3 100%);
 }
 
 .game-mode.mode-2 {
-    border-color: #FFFFFF;
-    background: linear-gradient(135deg, #444 0%, #FFFFFF 100%);
+    border-color: #4CAF50;
+    background: linear-gradient(135deg, #444 0%, #4CAF50 100%);
 }
 
 .game-mode.mode-3 {
-    border-color: #b551dd;
-    background: linear-gradient(135deg, #444 0%, #b551dd 100%);
+    border-color: #FFEB3B;
+    background: linear-gradient(135deg, #444 0%, #FFEB3B 100%);
 }
 
 .game-mode.mode-4 {

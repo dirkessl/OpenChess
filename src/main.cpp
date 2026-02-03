@@ -60,16 +60,7 @@ void setup() {
   boardDriver.begin();
   wifiManager.begin();
   Serial.println();
-  Serial.println("=== Game Selection Mode ===");
   showGameSelection();
-  Serial.println("Four LEDs are lit in the center of the board:");
-  Serial.println("Gold:   Chess Moves (Human vs Human)");
-  Serial.println("White:  Chess Bot (Human vs AI)");
-  Serial.println("Purple: Lichess (Play online games)");
-  Serial.println("Red:    Sensor Test");
-  Serial.println();
-  Serial.println("Place any chess piece on a LED to select that mode");
-  Serial.println("================================================");
 }
 
 void loop() {
@@ -180,17 +171,24 @@ void showGameSelection() {
   boardDriver.acquireLEDs();
   boardDriver.clearAllLEDs(false);
   // Light up the 4 selector positions in the middle of the board
-  // Each mode has a different color for easy identification
-  // Position 1: Chess Moves (row 3, col 3) - Orange
-  boardDriver.setSquareLED(3, 3, LedColors::Orange);
-  // Position 2: Chess Bot (row 3, col 4) - White
-  boardDriver.setSquareLED(3, 4, LedColors::White);
-  // Position 3: Lichess (row 4, col 3) - Purple
-  boardDriver.setSquareLED(4, 3, LedColors::Purple);
+  // Position 1: Chess Moves (row 3, col 3) - Blu
+  boardDriver.setSquareLED(3, 3, LedColors::Blu);
+  // Position 2: Chess Bot (row 3, col 4) - Green
+  boardDriver.setSquareLED(3, 4, LedColors::Green);
+  // Position 3: Lichess (row 4, col 3) - Yellow
+  boardDriver.setSquareLED(4, 3, LedColors::Yellow);
   // Position 4: Sensor Test (row 4, col 4) - Red
   boardDriver.setSquareLED(4, 4, LedColors::Red);
   boardDriver.showLEDs();
   boardDriver.releaseLEDs();
+  Serial.println("=============== Game Selection Mode ===============");
+  Serial.println("Four LEDs are lit in the center of the board:");
+  Serial.println("  Blu:    Chess Moves (Human vs Human)");
+  Serial.println("  Green:  Chess Bot (Human vs AI)");
+  Serial.println("  Yellow: Lichess (Play online games)");
+  Serial.println("  Red:    Sensor Test");
+  Serial.println("Place any chess piece on a LED to select that mode");
+  Serial.println("===================================================");
 }
 
 void handleGameSelection() {
@@ -322,8 +320,8 @@ void handleBotConfigSelection() {
   boardDriver.setSquareLED(5, 1, LedColors::Green);
 
   // Medium (col 3) - Orange/Gold
-  boardDriver.setSquareLED(2, 3, LedColors::Gold);
-  boardDriver.setSquareLED(5, 3, LedColors::Gold);
+  boardDriver.setSquareLED(2, 3, LedColors::Yellow);
+  boardDriver.setSquareLED(5, 3, LedColors::Yellow);
 
   // Hard (col 5) - Red
   boardDriver.setSquareLED(2, 5, LedColors::Red);

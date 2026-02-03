@@ -758,9 +758,9 @@ void BoardDriver::doCapture(int centerRow, int centerCol) {
               finalG = max(finalG, (uint8_t)(LedColors::Red.g * intensity));
               finalB = max(finalB, (uint8_t)(LedColors::Red.b * intensity));
             } else {
-              finalR = max(finalR, (uint8_t)(LedColors::Gold.r * intensity));
-              finalG = max(finalG, (uint8_t)(LedColors::Gold.g * intensity));
-              finalB = max(finalB, (uint8_t)(LedColors::Gold.b * intensity));
+              finalR = max(finalR, (uint8_t)(LedColors::Yellow.r * intensity));
+              finalG = max(finalG, (uint8_t)(LedColors::Yellow.g * intensity));
+              finalB = max(finalB, (uint8_t)(LedColors::Yellow.b * intensity));
             }
           }
         }
@@ -788,7 +788,7 @@ void BoardDriver::doPromotion(int col) {
     for (int row = 0; row < 8; row++) {
       // Create a golden wave moving up and down the column
       if ((step + row) % 8 < 4)
-        setSquareLED(row, col, LedColors::Gold);
+        setSquareLED(row, col, LedColors::Yellow);
       else
         setSquareLED(row, col, LedColors::Off);
     }
@@ -919,13 +919,12 @@ void BoardDriver::doWaiting(std::atomic<bool>* stopFlag) {
   int frame = 0;
   while (!stopFlag || !stopFlag->load()) {
     clearAllLEDs(false);
-    // Light up 4 consecutive LEDs in purple (Lichess color)
+    // Light up consecutive LEDs moving around the board
     for (int i = 0; i < 4; i++) {
-      int idx = (frame + i) % numPositions;
-      setSquareLED(positions[idx][0], positions[idx][1], LedColors::Purple);
-      // Also light up the opposite side for symmetry
-      idx = (frame + i + 15) % numPositions;
-      setSquareLED(positions[idx][0], positions[idx][1], LedColors::Purple);
+      for (int j = 0; j < 2; j++) {
+        int idx = (frame + i + (j * 14)) % numPositions;
+        setSquareLED(positions[idx][0], positions[idx][1], LedColors::White);
+      }
     }
     showLEDs();
     frame = (frame + 1) % numPositions;

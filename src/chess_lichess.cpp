@@ -58,7 +58,7 @@ void ChessLichess::waitForLichessGame() {
   event.type = LichessEventType::UNKNOWN;
   while (!gameOver) {
     if (!LichessAPI::pollForGameEvent(event) || event.type != LichessEventType::GAME_START) {
-      delay(1000);
+      delay(2000);
       continue;
     }
     break;

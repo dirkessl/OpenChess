@@ -321,7 +321,7 @@ void ChessGame::updateGameStatus() {
     int kingRow = -1;
     int kingCol = -1;
     if (findKingPosition(currentTurn, kingRow, kingCol))
-      boardDriver->blinkSquare(kingRow, kingCol, LedColors::Gold);
+      boardDriver->blinkSquare(kingRow, kingCol, LedColors::Yellow);
   }
 
   Serial.printf("It's %s's turn !\n", ChessUtils::colorName(currentTurn));
