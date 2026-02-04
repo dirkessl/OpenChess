@@ -151,7 +151,10 @@ void loop() {
       }
       break;
     case MODE_SENSOR_TEST:
-      sensorTest.update();
+      if (sensorTest.isComplete())
+        showGameSelection();
+      else
+        sensorTest.update();
       break;
     default:
       showGameSelection();
