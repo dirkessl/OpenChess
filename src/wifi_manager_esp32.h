@@ -58,10 +58,13 @@ class WiFiManagerESP32 {
   String getWiFiInfoJSON();
   String getBoardUpdateJSON();
   String getLichessInfoJSON();
+  String getBoardSettingsJSON();
   void handleBoardEditSuccess(AsyncWebServerRequest* request);
   void handleConnectWiFi(AsyncWebServerRequest* request);
   void handleGameSelection(AsyncWebServerRequest* request);
   void handleSaveLichessToken(AsyncWebServerRequest* request);
+  void handleBoardSettings(AsyncWebServerRequest* request);
+  void handleBoardCalibration(AsyncWebServerRequest* request);
 
  public:
   WiFiManagerESP32(BoardDriver* boardDriver);

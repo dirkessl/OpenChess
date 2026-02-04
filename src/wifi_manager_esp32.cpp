@@ -60,6 +60,9 @@ void WiFiManagerESP32::begin() {
   server.on("/gameselect", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleGameSelection(request); });
   server.on("/lichess", HTTP_GET, [this](AsyncWebServerRequest* request) { request->send(200, "application/json", this->getLichessInfoJSON()); });
   server.on("/lichess", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleSaveLichessToken(request); });
+  server.on("/board-settings", HTTP_GET, [this](AsyncWebServerRequest* request) { request->send(200, "application/json", this->getBoardSettingsJSON()); });
+  server.on("/board-settings", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleBoardSettings(request); });
+  server.on("/board-calibrate", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleBoardCalibration(request); });
   server.onNotFound([](AsyncWebServerRequest* request) {
     const Page* page = findPage(request->url().c_str());
     if (!page) {
@@ -213,6 +216,43 @@ void WiFiManagerESP32::handleSaveLichessToken(AsyncWebServerRequest* request) {
   Serial.println("Lichess API token saved to NVS");
 
   request->send(200, "text/plain", "OK");
+}
+
+String WiFiManagerESP32::getBoardSettingsJSON() {
+  return "{\"brightness\":" + String(boardDriver->getBrightness()) + ",\"dimMultiplier\":" + String(boardDriver->getDimMultiplier()) + "}";
+}
+
+void WiFiManagerESP32::handleBoardSettings(AsyncWebServerRequest* request) {
+  bool changed = false;
+
+  if (request->hasArg("brightness")) {
+    int brightness = request->arg("brightness").toInt();
+    if (brightness >= 0 && brightness <= 255) {
+      boardDriver->setBrightness((uint8_t)brightness);
+      changed = true;
+    }
+  }
+
+  if (request->hasArg("dimMultiplier")) {
+    int dimMult = request->arg("dimMultiplier").toInt();
+    if (dimMult >= 0 && dimMult <= 100) {
+      boardDriver->setDimMultiplier((uint8_t)dimMult);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    boardDriver->saveLedSettings();
+    Serial.println("Board settings updated via web interface");
+    request->send(200, "text/plain", "OK");
+  } else {
+    request->send(400, "text/plain", "No valid settings provided");
+  }
+}
+
+void WiFiManagerESP32::handleBoardCalibration(AsyncWebServerRequest* request) {
+  boardDriver->triggerCalibration();
+  request->send(200, "text/plain", "Calibration will start on next reboot");
 }
 
 LichessConfig WiFiManagerESP32::getLichessConfig() {

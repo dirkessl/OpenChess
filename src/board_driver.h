@@ -123,6 +123,11 @@ class BoardDriver {
     ColsAxis = 1,
     UnknownAxis = 2,
   };
+  // LED settings (persisted in NVS)
+  uint8_t brightness;                       // Global brightness 0-255
+  uint8_t dimMultiplier;                    // Dark square dim factor 0-100 (stored as percentage)
+  LedRGB currentColors[NUM_ROWS][NUM_COLS]; // Track current colors for dim multiplier updates
+
   // Calibration data
   uint8_t swapAxes;
   uint8_t toLogicalRow[NUM_ROWS];
@@ -133,6 +138,7 @@ class BoardDriver {
   bool loadCalibration();
   void saveCalibration();
   bool runCalibration();
+  void loadLedSettings();
   void readRawSensors(bool rawState[NUM_ROWS][NUM_COLS]);
   bool waitForBoardEmpty();
   bool waitForSingleRawPress(int& rawRow, int& rawCol, unsigned long stableMs = 500);
@@ -169,6 +175,14 @@ class BoardDriver {
   void flashBoardAnimation(LedRGB color, int times = 3);
   std::atomic<bool>* startThinkingAnimation();
   std::atomic<bool>* startWaitingAnimation();
+
+  // Board settings
+  uint8_t getBrightness() { return brightness; }
+  uint8_t getDimMultiplier() { return dimMultiplier; }
+  void setBrightness(uint8_t value);
+  void setDimMultiplier(uint8_t value);
+  void saveLedSettings();
+  void triggerCalibration();
 };
 
 #endif // BOARD_DRIVER_H

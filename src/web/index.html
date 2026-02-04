@@ -61,16 +61,37 @@
             </div>
         </div>
 
-        <!-- Future Settings Placeholder Section -->
+        <!-- Board Settings Section -->
         <div class="settings-section">
-            <div class="section-header" onclick="toggleSection('other')">
-                <span class="section-icon" id="other-icon">▶</span>
-                <h3>Other Settings</h3>
+            <div class="section-header" onclick="toggleSection('board')">
+                <span class="section-icon" id="board-icon">▶</span>
+                <h3>Board Settings</h3>
             </div>
-            <div class="section-content" id="other-content">
-                <p class="section-description" style="text-align: center; color: #888;">
-                    More settings coming soon...
+            <div class="section-content" id="board-content">
+                <p class="section-description">
+                    Adjust the LED brightness and dark square dimming for your chess board.
                 </p>
+                <form id="boardSettingsForm">
+                    <div class="form-group">
+                        <label for="brightness">LED Brightness: <span id="brightness-value">255</span></label>
+                        <input type="range" id="brightness" name="brightness" min="10" max="255" value="255"
+                            class="slider-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="dimMultiplier">Dark Square Dimming: <span id="dim-value">70</span>%</label>
+                        <input type="range" id="dimMultiplier" name="dimMultiplier" min="20" max="100" value="70"
+                            class="slider-input">
+                    </div>
+                    <input type="submit" style="background-color: #4CAF50;" value="Save LED Settings">
+                </form>
+                <div class="calibration-section">
+                    <p class="section-description" style="margin-top: 15px; margin-bottom: 10px;">
+                        Run board calibration to map LEDs and sensors to the correct squares.
+                    </p>
+                    <button type="button" id="calibrateBtn" class="button" style="background-color: #f44336;">
+                        Start Board Calibration
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -82,7 +103,7 @@
         const sectionStates = {
             wifi: false,
             lichess: false,
-            other: false
+            board: false
         };
 
         function toggleSection(name) {
@@ -140,6 +161,76 @@
         // Fetch info on page load
         updateWiFiInfo();
         updateLichessInfo();
+        updateBoardSettings();
+
+        // Board settings functions
+        function updateBoardSettings() {
+            fetch('/board-settings')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('brightness').value = data.brightness;
+                    document.getElementById('brightness-value').textContent = data.brightness;
+                    document.getElementById('dimMultiplier').value = data.dimMultiplier;
+                    document.getElementById('dim-value').textContent = data.dimMultiplier;
+                })
+                .catch(() => {
+                    console.log('Error loading board settings');
+                });
+        }
+
+        // Update slider value displays in real-time
+        document.getElementById('brightness').addEventListener('input', function () {
+            document.getElementById('brightness-value').textContent = this.value;
+        });
+
+        document.getElementById('dimMultiplier').addEventListener('input', function () {
+            document.getElementById('dim-value').textContent = this.value;
+        });
+
+        // Handle board settings form submission
+        document.getElementById('boardSettingsForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const brightness = document.getElementById('brightness').value;
+            const dimMultiplier = document.getElementById('dimMultiplier').value;
+
+            const formData = new URLSearchParams();
+            formData.append('brightness', brightness);
+            formData.append('dimMultiplier', dimMultiplier);
+
+            fetch('/board-settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData
+            })
+                .then(response => {
+                    if (response.ok) {
+                        alert('LED settings saved successfully!');
+                    } else {
+                        alert('Failed to save settings. Please try again.');
+                    }
+                })
+                .catch(() => {
+                    alert('Error saving settings. Please try again.');
+                });
+        });
+
+        // Handle calibration button
+        document.getElementById('calibrateBtn').addEventListener('click', function () {
+            if (confirm('This will clear the current board calibration. The board will need to be calibrated on the next reboot. Continue?')) {
+                fetch('/board-calibrate', {
+                    method: 'POST'
+                })
+                    .then(response => response.text())
+                    .then(data => {
+                        alert(data);
+                    })
+                    .catch(() => {
+                        alert('Error starting calibration. Please try again.');
+                    });
+            }
+        });
 
         // Handle WiFi form submission
         document.getElementById('wifiForm').addEventListener('submit', function (e) {

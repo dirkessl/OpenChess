@@ -71,6 +71,58 @@ input[type="submit"],
     box-sizing: border-box;
 }
 
+/* Range slider input styling */
+.slider-input {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 12px;
+    background: #555;
+    border-radius: 6px;
+    outline: none;
+    margin: 10px 0;
+    border: none;
+    padding: 0;
+}
+
+.slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: #ec8703;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.slider-input::-webkit-slider-thumb:hover {
+    background: #ff9a1f;
+    transform: scale(1.1);
+}
+
+.slider-input::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    background: #ec8703;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.slider-input::-moz-range-thumb:hover {
+    background: #ff9a1f;
+    transform: scale(1.1);
+}
+
+/* Calibration section styling */
+.calibration-section {
+    border-top: 1px solid #555;
+    padding-top: 10px;
+    margin-top: 10px;
+}
+
 input[type="submit"]:hover,
 .button:hover {
     filter: brightness(1.15);

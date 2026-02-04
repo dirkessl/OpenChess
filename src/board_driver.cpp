@@ -26,21 +26,24 @@ static constexpr int DefaultRowColToLEDindexMap[NUM_ROWS][NUM_COLS] = {
     {63, 62, 61, 60, 59, 58, 57, 56},
 };
 
-BoardDriver::BoardDriver() : strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800), lastEnabledCol(-2), swapAxes(0), calibrationLoaded(false) {
+BoardDriver::BoardDriver() : strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800), lastEnabledCol(-2), brightness(BRIGHTNESS), dimMultiplier(70), swapAxes(0), calibrationLoaded(false) {
   for (int i = 0; i < NUM_ROWS; i++)
     toLogicalRow[i] = i;
   for (int i = 0; i < NUM_COLS; i++)
     toLogicalCol[i] = i;
   for (int row = 0; row < NUM_ROWS; row++)
-    for (int col = 0; col < NUM_COLS; col++)
+    for (int col = 0; col < NUM_COLS; col++) {
       ledIndexMap[row][col] = DefaultRowColToLEDindexMap[row][col];
+      currentColors[row][col] = LedColors::Off;
+    }
 }
 
 void BoardDriver::begin() {
   // Initialize NeoPixel strip
   strip.begin();
-  showLEDs(); // turn off all pixels
-  strip.setBrightness(BRIGHTNESS);
+  showLEDs();        // turn off all LEDs
+  loadLedSettings(); // Load LED settings from NVS (brightness, dim multiplier)
+  strip.setBrightness(brightness);
   // Shift register pins as outputs
   pinMode(SR_SER_DATA_PIN, OUTPUT);
   pinMode(SR_CLK_PIN, OUTPUT);
@@ -611,6 +614,9 @@ void BoardDriver::releaseLEDs() {
 }
 
 void BoardDriver::clearAllLEDs(bool show) {
+  for (int row = 0; row < NUM_ROWS; row++)
+    for (int col = 0; col < NUM_COLS; col++)
+      currentColors[row][col] = LedColors::Off;
   for (int i = 0; i < LED_COUNT; i++)
     strip.setPixelColor(i, 0);
   if (show)
@@ -618,9 +624,10 @@ void BoardDriver::clearAllLEDs(bool show) {
 }
 
 void BoardDriver::setSquareLED(int row, int col, LedRGB color) {
+  currentColors[row][col] = color; // Track the intended color
   float multiplier = 1.0f;
   if ((row + col) % 2 == 1)
-    multiplier = 0.7f; // Dim dark squares to 70% brightness because they appear brighter due to the contrast
+    multiplier = dimMultiplier / 100.0f; // Dim dark squares based on user setting
   strip.setPixelColor(getPixelIndex(row, col), strip.Color(color.r * multiplier, color.g * multiplier, color.b * multiplier));
 }
 
@@ -932,4 +939,60 @@ void BoardDriver::doWaiting(std::atomic<bool>* stopFlag) {
   }
   clearAllLEDs();
   delete stopFlag;
+}
+
+// LED settings methods
+void BoardDriver::setBrightness(uint8_t value) {
+  brightness = value > 255 ? 255 : (value < 10 ? 10 : value);
+  strip.setBrightness(brightness);
+  showLEDs();
+}
+
+void BoardDriver::setDimMultiplier(uint8_t value) {
+  dimMultiplier = value > 100 ? 100 : (value < 20 ? 20 : value);
+  // Re-apply all current colors with new dim multiplier
+  for (int row = 0; row < NUM_ROWS; row++)
+    for (int col = 0; col < NUM_COLS; col++)
+      setSquareLED(row, col, currentColors[row][col]);
+  showLEDs();
+}
+
+void BoardDriver::loadLedSettings() {
+  if (!ChessUtils::ensureNvsInitialized()) {
+    Serial.println("NVS init failed - LED settings not loaded");
+    return;
+  }
+  Preferences prefs;
+  prefs.begin("ledSettings", true);
+  brightness = prefs.getUChar("brightness", BRIGHTNESS);
+  dimMultiplier = prefs.getUChar("dimMult", 70);
+  prefs.end();
+  Serial.printf("LED settings loaded: brightness=%d, dimMultiplier=%d\n", brightness, dimMultiplier);
+}
+
+void BoardDriver::saveLedSettings() {
+  if (!ChessUtils::ensureNvsInitialized()) {
+    Serial.println("NVS init failed - LED settings not saved");
+    return;
+  }
+  Preferences prefs;
+  prefs.begin("ledSettings", false);
+  prefs.putUChar("brightness", brightness);
+  prefs.putUChar("dimMult", dimMultiplier);
+  prefs.end();
+  Serial.printf("LED settings saved: brightness=%d, dimMultiplier=%d\n", brightness, dimMultiplier);
+}
+
+void BoardDriver::triggerCalibration() {
+  // Mark calibration as needed by clearing the saved calibration
+  if (!ChessUtils::ensureNvsInitialized()) {
+    Serial.println("NVS init failed - cannot trigger calibration");
+    return;
+  }
+  Preferences prefs;
+  prefs.begin("boardCal", false);
+  prefs.clear();
+  prefs.end();
+  Serial.println("Board calibration cleared - rebooting ...");
+  ESP.restart();
 }
