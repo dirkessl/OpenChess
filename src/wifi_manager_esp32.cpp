@@ -67,7 +67,7 @@ void WiFiManagerESP32::begin() {
       return;
     }
     AsyncWebServerResponse* res =
-      request->beginResponse_P(
+      request->beginResponse(
         200,
         page->mime,
         page->data,
