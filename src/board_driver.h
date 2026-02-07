@@ -34,13 +34,15 @@
 #define SR_LATCH_PIN 26
 // Pin 14 (SER) GPIO = Serial data input
 #define SR_SER_DATA_PIN 33
+// Set to 1 if the shift register outputs drive PNP transistors
+#define SR_INVERT_OUTPUTS 0
 
 // ---------------------------
 // Row and column pins don't need to be in any particular order, calibration will map them correctly
 // ---------------------------
 
 // ---------------------------
-// Row Input Pins (Safe pins for ESP32: 4, 13, 14, [16-17], 18, 19, 21, 22, 23, 25, 26, 27, 32, 33)
+// Row Input Pins (Safe GPIOs for ESP32: 4, 13, 14, [16-17], 18, 19, 21, 22, 23, 25, 26, 27, 32, 33)
 // ---------------------------
 #define ROW_PIN_0 4
 #define ROW_PIN_1 16

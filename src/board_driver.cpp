@@ -541,6 +541,9 @@ bool BoardDriver::runCalibration() {
 }
 
 void BoardDriver::loadShiftRegister(byte data, int bits) {
+#if defined(SR_INVERT_OUTPUTS) && SR_INVERT_OUTPUTS != 0
+  data = ~data;
+#endif
   // Make sure latch is low before shifting data
   digitalWrite(SR_LATCH_PIN, LOW);
   // Shift bits MSB first
