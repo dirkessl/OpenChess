@@ -13,7 +13,7 @@ uint64_t ChessEngine::computeZobristHash(const char board[8][8], char sideToMove
   uint64_t hash = 0;
 
   // Hash piece positions
-  for (int row = 0; row < 8; row++)
+  for (int row = 0; row < 8; row++) {
     for (int col = 0; col < 8; col++) {
       char piece = board[row][col];
       if (piece != ' ') {
@@ -22,21 +22,25 @@ uint64_t ChessEngine::computeZobristHash(const char board[8][8], char sideToMove
         hash ^= ZOBRIST_TABLE[idx][sq];
       }
     }
+  }
 
-  // Hash castling rights
+  // https://lichess.org/forum/general-chess-discussion/3-fold-repetition-and-castling-rights-sarana-martinez
+  // Hash castling rights (unlike en-passant, castling rights always matter for repetition and are only lost AFTER a rook or king moves, even if there are no legal castling moves now or never again in the future, they still count)
   hash ^= ZOBRIST_CASTLING[castlingRights];
 
-  // Hash en passant file
+  // Hash en passant file only if a legal en passant capture exists.
+  // Per FIDE rules, the en passant square only matters for repetition if an opposing pawn can actually make the capture (including not leaving the king in check).
   if (enPassantTargetRow >= 0 && enPassantTargetCol >= 0) {
     int capturerRow = (sideToMove == 'w') ? enPassantTargetRow + 1 : enPassantTargetRow - 1;
     char capturerPawn = (sideToMove == 'w') ? 'P' : 'p';
-    bool canCapture = false;
-    if (enPassantTargetCol > 0 && board[capturerRow][enPassantTargetCol - 1] == capturerPawn)
-      canCapture = true;
-    if (enPassantTargetCol < 7 && board[capturerRow][enPassantTargetCol + 1] == capturerPawn)
-      canCapture = true;
-    // Per FIDE rules, the en passant square only matters for repetition if an opposing pawn can actually make the capture
-    if (canCapture)
+    bool legalEpMoveExists = false;
+    // Check left adjacent pawn
+    if (enPassantTargetCol > 0 && board[capturerRow][enPassantTargetCol - 1] == capturerPawn && !wouldMoveLeaveKingInCheck(board, capturerRow, enPassantTargetCol - 1, enPassantTargetRow, enPassantTargetCol))
+      legalEpMoveExists = true;
+    // Check right adjacent pawn
+    if (!legalEpMoveExists && enPassantTargetCol < 7 && board[capturerRow][enPassantTargetCol + 1] == capturerPawn && !wouldMoveLeaveKingInCheck(board, capturerRow, enPassantTargetCol + 1, enPassantTargetRow, enPassantTargetCol))
+      legalEpMoveExists = true;
+    if (legalEpMoveExists)
       hash ^= ZOBRIST_EN_PASSANT[enPassantTargetCol];
   }
 
@@ -142,7 +146,7 @@ void ChessEngine::incrementFullmoveClock(char sideJustMoved) {
 }
 
 // Generate pseudo-legal moves (without check filtering)
-void ChessEngine::getPseudoLegalMoves(const char board[8][8], int row, int col, int& moveCount, int moves[][2], bool includeCastling) {
+void ChessEngine::getPseudoLegalMoves(const char board[8][8], int row, int col, int& moveCount, int moves[][2], bool includeCastling) const {
   moveCount = 0;
   char piece = board[row][col];
 
@@ -197,7 +201,7 @@ void ChessEngine::getPossibleMoves(const char board[8][8], int row, int col, int
 }
 
 // Pawn move generation
-void ChessEngine::addPawnMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+void ChessEngine::addPawnMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const {
   // Board layout: row 0 = rank 8 (black), row 7 = rank 1 (White)
   // White pawns move from row 6 (rank 2) toward row 0 (rank 8): direction -1
   // Black pawns move from row 1 (rank 7) toward row 7 (rank 1): direction +1
@@ -250,7 +254,7 @@ void ChessEngine::addPawnMoves(const char board[8][8], int row, int col, char pi
 }
 
 // Rook move generation
-void ChessEngine::addRookMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+void ChessEngine::addRookMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const {
   int directions[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
   for (int d = 0; d < 4; d++)
@@ -278,7 +282,7 @@ void ChessEngine::addRookMoves(const char board[8][8], int row, int col, char pi
 }
 
 // Knight move generation
-void ChessEngine::addKnightMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+void ChessEngine::addKnightMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const {
   int knightMoves[8][2] = {{2, 1}, {1, 2}, {-1, 2}, {-2, 1}, {-2, -1}, {-1, -2}, {1, -2}, {2, -1}};
 
   for (int i = 0; i < 8; i++) {
@@ -296,7 +300,7 @@ void ChessEngine::addKnightMoves(const char board[8][8], int row, int col, char 
 }
 
 // Bishop move generation
-void ChessEngine::addBishopMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+void ChessEngine::addBishopMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const {
   int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
   for (int d = 0; d < 4; d++)
@@ -324,13 +328,13 @@ void ChessEngine::addBishopMoves(const char board[8][8], int row, int col, char 
 }
 
 // Queen move generation (combination of rook and bishop)
-void ChessEngine::addQueenMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+void ChessEngine::addQueenMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const {
   addRookMoves(board, row, col, pieceColor, moveCount, moves);
   addBishopMoves(board, row, col, pieceColor, moveCount, moves);
 }
 
 // King move generation
-void ChessEngine::addKingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2], bool includeCastling) {
+void ChessEngine::addKingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2], bool includeCastling) const {
   int kingMoves[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
   for (int i = 0; i < 8; i++) {
@@ -356,7 +360,7 @@ bool ChessEngine::hasCastlingRight(char pieceColor, bool kingSide) const {
   return kingSide ? ((castlingRights & 0x04) != 0) : ((castlingRights & 0x08) != 0);
 }
 
-void ChessEngine::addCastlingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) {
+void ChessEngine::addCastlingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const {
   // Castling is only possible from the starting king square.
   // Board layout: row 0 = rank 8, row 7 = rank 1.
   int homeRow = (pieceColor == 'w') ? 7 : 0;
@@ -393,7 +397,7 @@ void ChessEngine::addCastlingMoves(const char board[8][8], int row, int col, cha
 }
 
 // Helper function to check if a square is occupied by an opponent piece
-bool ChessEngine::isSquareOccupiedByOpponent(const char board[8][8], int row, int col, char pieceColor) {
+bool ChessEngine::isSquareOccupiedByOpponent(const char board[8][8], int row, int col, char pieceColor) const {
   char targetPiece = board[row][col];
   if (targetPiece == ' ')
     return false;
@@ -403,12 +407,12 @@ bool ChessEngine::isSquareOccupiedByOpponent(const char board[8][8], int row, in
 }
 
 // Helper function to check if a square is empty
-bool ChessEngine::isSquareEmpty(const char board[8][8], int row, int col) {
+bool ChessEngine::isSquareEmpty(const char board[8][8], int row, int col) const {
   return board[row][col] == ' ';
 }
 
 // Helper function to check if coordinates are within board bounds
-bool ChessEngine::isValidSquare(int row, int col) {
+bool ChessEngine::isValidSquare(int row, int col) const {
   return row >= 0 && row < 8 && col >= 0 && col < 8;
 }
 
@@ -472,7 +476,7 @@ int ChessEngine::algebraicToRow(int rank) {
 // ---------------------------
 
 // Find the king position for a given color
-bool ChessEngine::findKing(const char board[8][8], char kingColor, int& kingRow, int& kingCol) {
+bool ChessEngine::findKing(const char board[8][8], char kingColor, int& kingRow, int& kingCol) const {
   char kingPiece = (kingColor == 'w') ? 'K' : 'k';
 
   for (int row = 0; row < 8; row++)
@@ -486,7 +490,7 @@ bool ChessEngine::findKing(const char board[8][8], char kingColor, int& kingRow,
 }
 
 // Check if a square is under attack by the opponent
-bool ChessEngine::isSquareUnderAttack(const char board[8][8], int row, int col, char defendingColor) {
+bool ChessEngine::isSquareUnderAttack(const char board[8][8], int row, int col, char defendingColor) const {
   char attackingColor = (defendingColor == 'w') ? 'b' : 'w';
 
   // Check all opponent pieces to see if any can attack this square
@@ -522,7 +526,7 @@ bool ChessEngine::isSquareUnderAttack(const char board[8][8], int row, int col, 
 }
 
 // Make a temporary move on a board copy
-void ChessEngine::makeMove(char board[8][8], int fromRow, int fromCol, int toRow, int toCol, char& capturedPiece) {
+void ChessEngine::makeMove(char board[8][8], int fromRow, int fromCol, int toRow, int toCol, char& capturedPiece) const {
   capturedPiece = board[toRow][toCol];
   char movingPiece = board[fromRow][fromCol];
 
@@ -566,7 +570,7 @@ void ChessEngine::makeMove(char board[8][8], int fromRow, int fromCol, int toRow
 }
 
 // Check if a move would leave the king in check
-bool ChessEngine::wouldMoveLeaveKingInCheck(const char board[8][8], int fromRow, int fromCol, int toRow, int toCol) {
+bool ChessEngine::wouldMoveLeaveKingInCheck(const char board[8][8], int fromRow, int fromCol, int toRow, int toCol) const {
   // Create a copy of the board to test the move
   char testBoard[8][8];
   for (int r = 0; r < 8; r++)

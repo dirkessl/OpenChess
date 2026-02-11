@@ -37,26 +37,26 @@ class ChessEngine {
   };
 
   // Helper functions for move generation
-  void addPawnMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]);
-  void addRookMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]);
-  void addKnightMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]);
-  void addBishopMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]);
-  void addQueenMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]);
-  void addKingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2], bool includeCastling);
+  void addPawnMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const;
+  void addRookMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const;
+  void addKnightMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const;
+  void addBishopMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const;
+  void addQueenMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const;
+  void addKingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2], bool includeCastling) const;
 
   bool hasCastlingRight(char pieceColor, bool kingSide) const;
-  void addCastlingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]);
+  void addCastlingMoves(const char board[8][8], int row, int col, char pieceColor, int& moveCount, int moves[][2]) const;
 
-  bool isSquareOccupiedByOpponent(const char board[8][8], int row, int col, char pieceColor);
-  bool isSquareEmpty(const char board[8][8], int row, int col);
-  bool isValidSquare(int row, int col);
+  bool isSquareOccupiedByOpponent(const char board[8][8], int row, int col, char pieceColor) const;
+  bool isSquareEmpty(const char board[8][8], int row, int col) const;
+  bool isValidSquare(int row, int col) const;
 
   // Check detection helpers
-  void getPseudoLegalMoves(const char board[8][8], int row, int col, int& moveCount, int moves[][2], bool includeCastling = true);
-  bool isSquareUnderAttack(const char board[8][8], int row, int col, char defendingColor);
-  bool findKing(const char board[8][8], char kingColor, int& kingRow, int& kingCol);
-  bool wouldMoveLeaveKingInCheck(const char board[8][8], int fromRow, int fromCol, int toRow, int toCol);
-  void makeMove(char board[8][8], int fromRow, int fromCol, int toRow, int toCol, char& capturedPiece);
+  void getPseudoLegalMoves(const char board[8][8], int row, int col, int& moveCount, int moves[][2], bool includeCastling = true) const;
+  bool isSquareUnderAttack(const char board[8][8], int row, int col, char defendingColor) const;
+  bool findKing(const char board[8][8], char kingColor, int& kingRow, int& kingCol) const;
+  bool wouldMoveLeaveKingInCheck(const char board[8][8], int fromRow, int fromCol, int toRow, int toCol) const;
+  void makeMove(char board[8][8], int fromRow, int fromCol, int toRow, int toCol, char& capturedPiece) const;
 
  public:
   ChessEngine();
