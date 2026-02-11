@@ -27,7 +27,6 @@ class ChessLichess : public ChessBot {
   // Game flow
   void waitForLichessGame();
   void syncBoardWithLichess(const LichessGameState& state);
-  void processLichessMove(const String& uciMove);
   void sendMoveToLichess(int fromRow, int fromCol, int toRow, int toCol, char promotedPiece = ' ');
 
  public:
