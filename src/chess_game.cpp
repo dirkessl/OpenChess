@@ -297,6 +297,7 @@ bool ChessGame::findKingPosition(char colorToMove, int& kingRow, int& kingCol) {
 }
 
 void ChessGame::updateGameStatus() {
+  chessEngine->incrementFullmoveClock(currentTurn);
   currentTurn = (currentTurn == 'w') ? 'b' : 'w';
   chessEngine->recordPosition(board, currentTurn);
 

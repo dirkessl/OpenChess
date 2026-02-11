@@ -7,7 +7,7 @@
 // ChessEngine Implementation
 // ---------------------------
 
-ChessEngine::ChessEngine() : castlingRights(0x0F), enPassantTargetRow(-1), enPassantTargetCol(-1), halfmoveClock(0), positionHistoryCount(0) {}
+ChessEngine::ChessEngine() : castlingRights(0x0F), enPassantTargetRow(-1), enPassantTargetCol(-1), halfmoveClock(0), fullmoveClock(1), positionHistoryCount(0) {}
 
 uint64_t ChessEngine::computeZobristHash(const char board[8][8], char sideToMove) const {
   uint64_t hash = 0;
@@ -116,6 +116,19 @@ void ChessEngine::updateHalfmoveClock(char movedPiece, char capturedPiece) {
 
 bool ChessEngine::isFiftyMoveRule() const {
   return halfmoveClock >= 100; // 100 half-moves = 50 full moves
+}
+
+int ChessEngine::getFullmoveClock() const {
+  return fullmoveClock;
+}
+
+void ChessEngine::setFullmoveClock(int clock) {
+  fullmoveClock = clock;
+}
+
+void ChessEngine::incrementFullmoveClock(char sideJustMoved) {
+  if (sideJustMoved == 'b')
+    fullmoveClock++;
 }
 
 // Generate pseudo-legal moves (without check filtering)

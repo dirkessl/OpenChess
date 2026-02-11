@@ -21,6 +21,8 @@ class ChessEngine {
 
   // Halfmove clock for 50-move rule (counts half-moves since last pawn move or capture)
   int halfmoveClock;
+  // Fullmove clock: starts at 1, incremented after Black's move
+  int fullmoveClock;
 
   // --- Zobrist hashing for threefold repetition detection ---
   // Position history (cleared on irreversible moves for memory efficiency)
@@ -64,6 +66,7 @@ class ChessEngine {
     clearEnPassantTarget();
     castlingRights = 0x0F;
     halfmoveClock = 0;
+    fullmoveClock = 1;
     clearPositionHistory();
   }
 
@@ -82,6 +85,11 @@ class ChessEngine {
   void setHalfmoveClock(int clock);
   void updateHalfmoveClock(char movedPiece, char capturedPiece);
   bool isFiftyMoveRule() const;
+
+  // Fullmove clock (starts at 1, increments after Black's move)
+  int getFullmoveClock() const;
+  void setFullmoveClock(int clock);
+  void incrementFullmoveClock(char sideJustMoved);
 
   // Threefold repetition detection (Zobrist hash-based)
   uint64_t computeZobristHash(const char board[8][8], char sideToMove) const;

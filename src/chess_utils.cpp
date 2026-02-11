@@ -87,8 +87,11 @@ String ChessUtils::boardToFEN(const char board[8][8], char currentTurn, ChessEng
   else
     fen += " 0";
 
-  // Fullmove number (simplified)
-  fen += " 1";
+  // Fullmove number
+  if (chessEngine != nullptr)
+    fen += " " + String(chessEngine->getFullmoveClock());
+  else
+    fen += " 1";
 
   return fen;
 }
@@ -179,6 +182,14 @@ void ChessUtils::fenToBoard(String fen, char board[8][8], char& currentTurn, Che
     String halfmoveStr = (fifthSpace > 0) ? remainingParts.substring(0, fifthSpace) : remainingParts;
     if (chessEngine != nullptr)
       chessEngine->setHalfmoveClock(halfmoveStr.toInt());
+    remainingParts = (fifthSpace > 0) ? remainingParts.substring(fifthSpace + 1) : "";
+  }
+
+  // Parse fullmove number
+  if (remainingParts.length() > 0) {
+    int fullmove = remainingParts.toInt();
+    if (chessEngine != nullptr)
+      chessEngine->setFullmoveClock(fullmove > 0 ? fullmove : 1);
   }
 }
 
