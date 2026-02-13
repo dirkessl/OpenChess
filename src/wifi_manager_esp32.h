@@ -10,8 +10,9 @@
 #include <Preferences.h>
 #include <WiFi.h>
 
-// Forward declaration for Lichess config
+// Forward declarations
 struct LichessConfig;
+class MoveHistory;
 
 // ---------------------------
 // WiFi Configuration
@@ -30,19 +31,17 @@ class WiFiManagerESP32 {
  private:
   AsyncWebServer server;
 
-  // Configuration variables
   Preferences prefs;
   String wifiSSID;
   String wifiPassword;
   String gameMode;
   String lichessToken;
 
-  // Bot configuration
   BotConfig botConfig = {StockfishSettings::medium(), true};
 
-  // Board state storage
+  MoveHistory* moveHistory;
   BoardDriver* boardDriver;
-  String currentFen; // Current board state in FEN notation
+  String currentFen;
   float boardEvaluation;
 
   // Board edit storage (pending edits from web interface)
@@ -60,9 +59,11 @@ class WiFiManagerESP32 {
   void handleSaveLichessToken(AsyncWebServerRequest* request);
   void handleBoardSettings(AsyncWebServerRequest* request);
   void handleBoardCalibration(AsyncWebServerRequest* request);
+  void handleGamesRequest(AsyncWebServerRequest* request);
+  void handleDeleteGame(AsyncWebServerRequest* request);
 
  public:
-  WiFiManagerESP32(BoardDriver* boardDriver);
+  WiFiManagerESP32(BoardDriver* boardDriver, MoveHistory* moveHistory);
   void begin();
 
   // Configuration getters

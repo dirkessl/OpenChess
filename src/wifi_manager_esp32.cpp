@@ -1,23 +1,17 @@
 #include "wifi_manager_esp32.h"
 #include "chess_lichess.h"
 #include "chess_utils.h"
+#include "move_history.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 
 static const char* INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-WiFiManagerESP32::WiFiManagerESP32(BoardDriver* bd) : boardDriver(bd), server(AP_PORT), wifiSSID(SECRET_SSID), wifiPassword(SECRET_PASS), gameMode("0"), lichessToken(""), botConfig(), currentFen(INITIAL_FEN), hasPendingEdit(false), boardEvaluation(0.0f) {}
+WiFiManagerESP32::WiFiManagerESP32(BoardDriver* bd, MoveHistory* mh) : boardDriver(bd), moveHistory(mh), server(AP_PORT), wifiSSID(SECRET_SSID), wifiPassword(SECRET_PASS), gameMode("0"), lichessToken(""), botConfig(), currentFen(INITIAL_FEN), hasPendingEdit(false), boardEvaluation(0.0f) {}
 
 void WiFiManagerESP32::begin() {
   Serial.println("=== Starting OpenChess WiFi Manager (ESP32) ===");
-
-  // Mount LittleFS filesystem for serving web pages
-  if (!LittleFS.begin(true)) {
-    Serial.println("ERROR: LittleFS mount failed!");
-  } else {
-    Serial.println("LittleFS mounted successfully");
-  }
 
   if (!ChessUtils::ensureNvsInitialized()) {
     Serial.println("NVS init failed - WiFi credentials not loaded");
@@ -71,20 +65,13 @@ void WiFiManagerESP32::begin() {
   server.on("/board-settings", HTTP_GET, [this](AsyncWebServerRequest* request) { request->send(200, "application/json", this->getBoardSettingsJSON()); });
   server.on("/board-settings", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleBoardSettings(request); });
   server.on("/board-calibrate", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleBoardCalibration(request); });
-
+  server.on("/games", HTTP_GET, [this](AsyncWebServerRequest* request) { this->handleGamesRequest(request); });
+  server.on("/games", HTTP_DELETE, [this](AsyncWebServerRequest* request) { this->handleDeleteGame(request); });
   // Serve sound files directly (no gzip variant exists, avoids .gz probe errors)
-  server.serveStatic("/sounds/", LittleFS, "/sounds/")
-      .setTryGzipFirst(false)
-      .setCacheControl("max-age=86400");
-
+  server.serveStatic("/sounds/", LittleFS, "/sounds/").setTryGzipFirst(false);
   // Serve all other static files from LittleFS (gzip handled automatically)
-  server.serveStatic("/", LittleFS, "/")
-      .setDefaultFile("index.html")
-      .setCacheControl("max-age=86400");
-
-  server.onNotFound([](AsyncWebServerRequest* request) {
-    request->send(404, "text/plain", "Not Found");
-  });
+  server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+  server.onNotFound([](AsyncWebServerRequest* request) { request->send(404, "text/plain", "Not Found"); });
   server.begin();
   Serial.println("Web server started on port 80");
 }
@@ -333,4 +320,45 @@ bool WiFiManagerESP32::connectToWiFi(const String& ssid, const String& password,
     // AP mode is still available
     return false;
   }
+}
+
+void WiFiManagerESP32::handleGamesRequest(AsyncWebServerRequest* request) {
+  if (request->hasArg("id")) {
+    // GET /games?id=N — return binary of game N
+    int id = request->arg("id").toInt();
+    if (id <= 0) {
+      request->send(400, "text/plain", "Invalid game id");
+      return;
+    }
+
+    String path = MoveHistory::gamePath(id);
+    if (!MoveHistory::quietExists(path.c_str())) {
+      request->send(404, "text/plain", "Game not found");
+      return;
+    }
+    // Serve file directly from LittleFS
+    AsyncWebServerResponse* response = request->beginResponse(LittleFS, path, "application/octet-stream", true);
+    request->send(response);
+  } else {
+    // GET /games — return JSON list of all saved games
+    request->send(200, "application/json", moveHistory->getGameListJSON());
+  }
+}
+
+void WiFiManagerESP32::handleDeleteGame(AsyncWebServerRequest* request) {
+  if (!request->hasArg("id")) {
+    request->send(400, "text/plain", "Missing id parameter");
+    return;
+  }
+
+  int id = request->arg("id").toInt();
+  if (id <= 0) {
+    request->send(400, "text/plain", "Invalid game id");
+    return;
+  }
+
+  if (moveHistory->deleteGame(id))
+    request->send(200, "text/plain", "OK");
+  else
+    request->send(404, "text/plain", "Game not found");
 }
