@@ -3,8 +3,8 @@
 OpenChess is a smart chessboard, it can show legal moves, plays against you using Stockfish or let you play online Lichess games on the physical board. It saves all games, allowing you to review them later
 
 <p align="center">
-   <img src="BuildGuide/51_PCB_SOLDER_ROWS_N_COLS.webp" height="400px">
-   <img src="BuildGuide/schematics/ESP32_PCB.webp" height="400px">
+   <img src="BuildGuide/51_PCB_SOLDER_ROWS_N_COLS.webp" height="325px">
+   <img src="BuildGuide/schematics/ESP32_PCB.webp" height="325px">
 </p>
 
 ##  Features (main differences with the original repo)
