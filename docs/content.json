@@ -4,12 +4,12 @@
     "hero": {
         "title": "Build Your Own",
         "titleAccent": "Smart Chess Board",
-        "description": "A complete step-by-step guide to building an ESP32-powered chess board with LED move indicators, hall-effect piece detection, Stockfish AI, and Lichess online play.",
+        "description": "A complete step-by-step guide to building an ESP32-powered chess board, 100% DIY, with LED move indicators, hall-effect piece detection, Stockfish AI, and Lichess online play.",
         "image": "video.gif"
     },
     "materials": {
         "navLabel": "Materials",
-        "toolsNote": "Soldering iron, hot glue gun, wire strippers, flush cutters, multimeter (optional but helpful), 3D printer (optional, for iron disc holders).",
+        "toolsNote": "Soldering iron, tape, glue, wire strippers, cutter, flush cutters, multimeter (optional but helpful to check connections and shorts).",
         "items": [
             {
                 "icon": "🔧",
@@ -29,27 +29,27 @@
             {
                 "icon": "📦",
                 "name": "74HC595 Shift Register",
-                "description": "1 pc - drives the 8×8 sensor matrix column scanning"
+                "description": "1 pc - drives the column scanning"
             },
             {
                 "icon": "🧲",
                 "name": "Neodymium Magnets",
-                "description": "8×4mm (32 pcs) or 8×2mm (64 pcs, stack 2 each) - embedded in chess pieces"
+                "description": "8×4mm (32 pcs) or 8×2mm (64 pcs, stack 2) - embedded in chess pieces"
             },
             {
                 "icon": "⚙️",
                 "name": "Iron Discs 12×1mm",
-                "description": "64 pcs - placed under the board to spread magnetic field for reliable detection"
+                "description": "64 pcs - placed under the board to hold pieces and spread magnetic field for reliable detection"
             },
             {
                 "icon": "🔌",
                 "name": "USB-C Female Port",
-                "description": "1 pc - for power injection at different points in the LED strip"
+                "description": "1 pc - for powering the board without having the ESP32 USB port hanging off the side"
             },
             {
                 "icon": "⚡",
-                "name": "Resistors (10k–100k Ω)",
-                "description": "Pull-up/down resistors - 10k preferred"
+                "name": "Resistors (10k Ω)",
+                "description": "8 pcs 10k Ohm - pull-up resistors for the hall effect sensors outputs"
             },
             {
                 "icon": "🔄",
