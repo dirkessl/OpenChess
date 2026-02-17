@@ -118,9 +118,6 @@
             const card = el('div', { className: 'step-card' });
 
             if (step.centerContent) card.style.textAlign = 'center';
-            if (step.stepNumber != null) {
-                card.append(el('div', { className: 'step-number' }, String(step.stepNumber)));
-            }
             if (step.title) card.append(el('h3', null, step.title));
             if (step.description) card.append(el('p', null, step.description));
 

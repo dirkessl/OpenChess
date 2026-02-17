@@ -289,19 +289,6 @@ kbd {
     border-color: var(--text-muted);
 }
 
-.step-number {
-    position: absolute;
-    top: -0.75rem;
-    left: 1.5rem;
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.8rem;
-    font-weight: 700;
-    padding: 0.2rem 0.75rem;
-    border-radius: 20px;
-    letter-spacing: 0.02em;
-}
-
 .step-card h3 {
     font-size: 1.25rem;
     font-weight: 600;
