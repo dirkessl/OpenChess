@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenChess Build Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar">
+        <div class="sidebar-header">
+            <h2>♟ OpenChess</h2>
+            <span class="sidebar-subtitle">Build Guide</span>
+        </div>
+        <ul id="nav-links" class="nav-links"></ul>
+    </nav>
+
+    <!-- Mobile top bar -->
+    <div id="mobile-topbar">
+        <button id="menu-toggle" aria-label="Toggle menu">☰</button>
+        <span>♟ OpenChess Build Guide</span>
+    </div>
+
+    <!-- Main Content — built dynamically from content.json -->
+    <main id="content"></main>
+
+    <!-- Floating Step Navigator -->
+    <div id="step-nav" class="step-nav hidden">
+        <button id="step-prev" class="step-nav-btn" aria-label="Previous step">&#8249;</button>
+        <span id="step-counter" class="step-nav-counter">1 / 1</span>
+        <button id="step-next" class="step-nav-btn" aria-label="Next step">&#8250;</button>
+    </div>
+
+    <!-- Image Zoom Modal -->
+    <div id="zoom-modal" class="zoom-modal">
+        <span class="zoom-close">&times;</span>
+        <button id="zoom-prev" class="zoom-nav zoom-prev" aria-label="Previous image">&#8249;</button>
+        <img id="zoom-img" alt="Zoomed image">
+        <button id="zoom-next" class="zoom-nav zoom-next" aria-label="Next image">&#8250;</button>
+        <div id="zoom-counter" class="zoom-counter"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
