@@ -44,8 +44,7 @@
         const container = el('div', { className: 'image-container' });
         const attrs = {
             src: IMG + encodeURI(imgData.file),
-            alt: imgData.alt || '',
-            loading: 'lazy'
+            alt: imgData.alt || ''
         };
         if (!imgData.noZoom) attrs.className = 'zoomable';
         if (imgData.maxWidth) attrs.style = { maxWidth: imgData.maxWidth };
@@ -78,7 +77,7 @@
         );
 
         const imgDiv = el('div', { className: 'hero-image' });
-        imgDiv.append(el('img', { src: IMG + hero.image, alt: 'OpenChess demo', loading: 'lazy' }));
+        imgDiv.append(el('img', { src: IMG + hero.image, alt: 'OpenChess demo' }));
 
         section.append(textDiv, imgDiv);
         contentEl.append(section);
@@ -217,7 +216,36 @@
         updateActiveLink();
     })();
 
-    // --- Mobile sidebar toggle ---
+    // --- Scroll-to-section helper (resilient to lazy-loaded images) ---
+    function scrollToSection(targetEl) {
+        if (!targetEl) return;
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // Only images above or inside the target section can shift its
+        // position — ignore anything further down the page.
+        const targetBottom = targetEl.offsetTop + targetEl.offsetHeight;
+        const pending = Array.from(contentEl.querySelectorAll('img'))
+            .filter(img => !img.complete && img.offsetTop <= targetBottom);
+        if (!pending.length) return;
+
+        let settled = false;
+        const stop = () => { settled = true; };
+        const timeout = setTimeout(stop, 5000);
+
+        function reScroll() {
+            if (settled) return;
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        pending.forEach(img => img.addEventListener('load', reScroll, { once: true }));
+
+        Promise.all(pending.map(img =>
+            img.complete ? Promise.resolve() :
+                new Promise(r => img.addEventListener('load', r, { once: true }))
+        )).then(() => { clearTimeout(timeout); stop(); });
+    }
+
+    // --- Mobile sidebar toggle + nav click handler ---
     (function () {
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('menu-toggle');
@@ -228,7 +256,14 @@
         }
 
         navLinks.forEach(link => {
-            link.addEventListener('click', () => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const id = link.getAttribute('href').slice(1);
+                const target = document.getElementById(id);
+                if (target) {
+                    history.replaceState(null, '', '#' + id);
+                    scrollToSection(target);
+                }
                 if (window.innerWidth <= 768) sidebar.classList.remove('open');
             });
         });
