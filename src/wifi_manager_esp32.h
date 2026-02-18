@@ -43,6 +43,7 @@ class WiFiManagerESP32 {
   String lichessToken;
 
   BotConfig botConfig = {StockfishSettings::medium(), true};
+  bool scanAllChannels;
 
   MoveHistory* moveHistory;
   BoardDriver* boardDriver;
@@ -64,6 +65,8 @@ class WiFiManagerESP32 {
   void handleSaveLichessToken(AsyncWebServerRequest* request);
   void handleBoardSettings(AsyncWebServerRequest* request);
   void handleBoardCalibration(AsyncWebServerRequest* request);
+  void getHardwareConfigJSON(AsyncWebServerRequest* request);
+  void handleHardwareConfig(AsyncWebServerRequest* request);
   void handleGamesRequest(AsyncWebServerRequest* request);
   void handleDeleteGame(AsyncWebServerRequest* request);
   // OTA update handlers

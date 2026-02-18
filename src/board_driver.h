@@ -10,7 +10,9 @@
 #include <freertos/task.h>
 
 // ---------------------------
-// Hardware Configuration
+// Default Hardware Configuration
+// These defaults are used if no pin configuration is saved in NVS.
+// Users with pre-built firmware can change pins via the web UI at runtime.
 // ---------------------------
 
 // ---------------------------
@@ -52,6 +54,24 @@
 #define ROW_PIN_5 21
 #define ROW_PIN_6 22
 #define ROW_PIN_7 23
+
+// ---------------------------
+// Runtime hardware configuration (loaded from NVS, editable via web UI)
+// Falls back to the #define defaults above if no NVS data exists.
+// ---------------------------
+struct HardwareConfig {
+  uint8_t ledPin;
+  uint8_t srClkPin;
+  uint8_t srLatchPin;
+  uint8_t srDataPin;
+  bool srInvertOutputs;
+  uint8_t rowPins[NUM_ROWS];
+
+  // Initialize with compile-time defaults
+  static HardwareConfig defaults() {
+    return {LED_PIN, SR_CLK_PIN, SR_LATCH_PIN, SR_SER_DATA_PIN, SR_INVERT_OUTPUTS != 0, {ROW_PIN_0, ROW_PIN_1, ROW_PIN_2, ROW_PIN_3, ROW_PIN_4, ROW_PIN_5, ROW_PIN_6, ROW_PIN_7}};
+  }
+};
 
 // ---------------------------
 // Sensor Polling Delay and Debounce
@@ -134,6 +154,9 @@ class BoardDriver {
   uint8_t dimMultiplier;                    // Dark square dim factor 0-100 (stored as percentage)
   LedRGB currentColors[NUM_ROWS][NUM_COLS]; // Track current colors for dim multiplier updates
 
+  // Runtime hardware pin configuration (persisted in NVS)
+  HardwareConfig hwConfig;
+
   // Calibration data
   uint8_t swapAxes;
   uint8_t toLogicalRow[NUM_ROWS];
@@ -145,6 +168,7 @@ class BoardDriver {
   void saveCalibration();
   bool runCalibration();
   void loadLedSettings();
+  void loadHardwareConfig();
   void readRawSensors(bool rawState[NUM_ROWS][NUM_COLS]);
   bool waitForBoardEmpty(unsigned long stableMs = 500);
   bool waitForSingleRawPress(int& rawRow, int& rawCol, unsigned long stableMs = 500);
@@ -193,6 +217,10 @@ class BoardDriver {
   void setDimMultiplier(uint8_t value);
   void saveLedSettings();
   void triggerCalibration();
+
+  // Hardware pin configuration (runtime, persisted in NVS)
+  const HardwareConfig& getHardwareConfig() const { return hwConfig; }
+  void saveHardwareConfig(const HardwareConfig& config);
 };
 
 #endif // BOARD_DRIVER_H

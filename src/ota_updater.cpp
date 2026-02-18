@@ -94,7 +94,7 @@ void OtaUpdater::removeWebAssets(const String& dirPath) {
     bool isDir = entry.isDirectory();
     entry.close();
 
-    if (!fullPath.startsWith("/games")) {
+    if (!fullPath.startsWith("/games") && fullPath != "/ota_temp.tar") {
       if (isDir) {
         removeWebAssets(fullPath);
         LittleFS.rmdir(fullPath);

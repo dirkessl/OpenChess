@@ -10,7 +10,7 @@
 
 static const char* INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-WiFiManagerESP32::WiFiManagerESP32(BoardDriver* bd, MoveHistory* mh) : boardDriver(bd), moveHistory(mh), server(AP_PORT), wifiSSID(SECRET_SSID), wifiPassword(SECRET_PASS), gameMode("0"), lichessToken(""), botConfig(), currentFen(INITIAL_FEN), hasPendingEdit(false), boardEvaluation(0.0f), otaUpdater(bd), autoOtaEnabled(false) {}
+WiFiManagerESP32::WiFiManagerESP32(BoardDriver* bd, MoveHistory* mh) : boardDriver(bd), moveHistory(mh), server(AP_PORT), wifiSSID(SECRET_SSID), wifiPassword(SECRET_PASS), gameMode("0"), lichessToken(""), botConfig(), scanAllChannels(WIFI_SCAN_ALL_CHANNELS), currentFen(INITIAL_FEN), hasPendingEdit(false), boardEvaluation(0.0f), otaUpdater(bd), autoOtaEnabled(false) {}
 
 void WiFiManagerESP32::begin() {
   Serial.println("=== Starting OpenChess WiFi Manager (ESP32) ===");
@@ -23,6 +23,7 @@ void WiFiManagerESP32::begin() {
       wifiSSID = prefs.getString("ssid", SECRET_SSID);
       wifiPassword = prefs.getString("pass", SECRET_PASS);
     }
+    scanAllChannels = prefs.getBool("scanAll", WIFI_SCAN_ALL_CHANNELS);
     prefs.end();
 
     // Load Lichess token
@@ -91,6 +92,9 @@ void WiFiManagerESP32::begin() {
       [](AsyncWebServerRequest* request) {},
       NULL,
       [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) { this->onWebAssetsUploadBody(request, data, len, index, total); });
+  // Hardware configuration endpoints
+  server.on("/hardware-config", HTTP_GET, [this](AsyncWebServerRequest* request) { this->getHardwareConfigJSON(request); });
+  server.on("/hardware-config", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleHardwareConfig(request); });
   // Serve sound files directly (no gzip variant exists, avoids .gz probe errors)
   server.serveStatic("/sounds/", LittleFS, "/sounds/").setTryGzipFirst(false);
   // Serve piece SVGs with aggressive caching, otherwise chrome doesn't actually use the cached versions
@@ -119,6 +123,7 @@ String WiFiManagerESP32::getWiFiInfoJSON() {
   doc["ap_ssid"] = AP_SSID;
   doc["ap_ip"] = WiFi.softAPIP().toString();
   doc["local_ip"] = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "0.0.0.0";
+  doc["scanAllChannels"] = scanAllChannels;
   String output;
   serializeJson(doc, output);
   return output;
@@ -137,6 +142,7 @@ void WiFiManagerESP32::handleBoardEditSuccess(AsyncWebServerRequest* request) {
 }
 
 void WiFiManagerESP32::handleConnectWiFi(AsyncWebServerRequest* request) {
+  bool changed = false;
   String newWifiSSID = "";
   String newWifiPassword = "";
   if (request->hasArg("ssid"))
@@ -144,8 +150,26 @@ void WiFiManagerESP32::handleConnectWiFi(AsyncWebServerRequest* request) {
   if (request->hasArg("password"))
     newWifiPassword = request->arg("password");
 
+  if (request->hasArg("scanAllChannels")) {
+    bool newScanAll = request->arg("scanAllChannels") == "1";
+    if (newScanAll != scanAllChannels) {
+      if (ChessUtils::ensureNvsInitialized()) {
+        prefs.begin("wifiCreds", false);
+        prefs.putBool("scanAll", newScanAll);
+        prefs.end();
+        scanAllChannels = newScanAll;
+        Serial.printf("WiFi scan all channels: %s\n", scanAllChannels ? "enabled" : "disabled");
+        request->send(200, "text/plain", "OK");
+        changed = true;
+      }
+    }
+  }
+
   if (newWifiSSID.length() >= 1 && newWifiPassword.length() >= 5 && (newWifiSSID != wifiSSID || newWifiPassword != wifiPassword)) {
-    request->send(200, "text/plain", "OK");
+    if (!changed) {
+      request->send(200, "text/plain", "OK");
+      changed = true;
+    }
     if (connectToWiFi(newWifiSSID, newWifiPassword, true)) {
       if (!ChessUtils::ensureNvsInitialized())
         Serial.println("NVS init failed - WiFi credentials not saved");
@@ -159,7 +183,9 @@ void WiFiManagerESP32::handleConnectWiFi(AsyncWebServerRequest* request) {
     }
     return;
   }
-  request->send(400, "text/plain", "ERROR");
+
+  if (!changed)
+    request->send(400, "text/plain", "ERROR");
 }
 
 void WiFiManagerESP32::handleGameSelection(AsyncWebServerRequest* request) {
@@ -294,6 +320,62 @@ void WiFiManagerESP32::handleBoardCalibration(AsyncWebServerRequest* request) {
   request->send(200, "text/plain", "Calibration will start on next reboot");
 }
 
+void WiFiManagerESP32::getHardwareConfigJSON(AsyncWebServerRequest* request) {
+  const HardwareConfig& hw = boardDriver->getHardwareConfig();
+  JsonDocument doc;
+  doc["ledPin"] = hw.ledPin;
+  doc["srClkPin"] = hw.srClkPin;
+  doc["srLatchPin"] = hw.srLatchPin;
+  doc["srDataPin"] = hw.srDataPin;
+  doc["srInvertOutputs"] = hw.srInvertOutputs;
+  JsonArray arr = doc["rowPins"].to<JsonArray>();
+  for (int i = 0; i < NUM_ROWS; i++) arr.add(hw.rowPins[i]);
+  String output;
+  serializeJson(doc, output);
+  request->send(200, "application/json", output);
+}
+
+void WiFiManagerESP32::handleHardwareConfig(AsyncWebServerRequest* request) {
+  HardwareConfig config = boardDriver->getHardwareConfig();
+  bool changed = false;
+
+  auto getPin = [&](const char* name, uint8_t& pin) {
+    if (request->hasArg(name)) {
+      int val = request->arg(name).toInt();
+      if (val >= 0 && val <= 39) { // ESP32 GPIO range
+        if ((uint8_t)val != pin) {
+          pin = (uint8_t)val;
+          changed = true;
+        }
+      }
+    }
+  };
+
+  getPin("ledPin", config.ledPin);
+  getPin("srClkPin", config.srClkPin);
+  getPin("srLatchPin", config.srLatchPin);
+  getPin("srDataPin", config.srDataPin);
+
+  if (request->hasArg("srInvertOutputs") && (request->arg("srInvertOutputs") == "1") != config.srInvertOutputs) {
+    config.srInvertOutputs = !config.srInvertOutputs;
+    changed = true;
+  }
+
+  for (int i = 0; i < NUM_ROWS; i++) {
+    String key = "rowPin" + String(i);
+    getPin(key.c_str(), config.rowPins[i]);
+  }
+
+  if (changed) {
+    boardDriver->saveHardwareConfig(config);
+    request->send(200, "text/plain", "Hardware config saved. Rebooting...");
+    delay(500);
+    ESP.restart();
+  } else {
+    request->send(400, "text/plain", "No valid parameters provided");
+  }
+}
+
 LichessConfig WiFiManagerESP32::getLichessConfig() {
   LichessConfig config;
   config.apiToken = lichessToken;
@@ -328,10 +410,10 @@ bool WiFiManagerESP32::connectToWiFi(const String& ssid, const String& password,
 
   // ESP32 can run both AP and Station modes simultaneously
   WiFi.mode(WIFI_AP_STA);
-#if defined(WIFI_SCAN_ALL_CHANNELS) && WIFI_SCAN_ALL_CHANNELS != 0
-  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
-  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
-#endif
+  if (scanAllChannels) {
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+  }
   WiFi.begin(ssid.c_str(), password.c_str());
 
   int attempts = 0;
@@ -472,6 +554,7 @@ void WiFiManagerESP32::handleOtaApply(AsyncWebServerRequest* request) {
   // Run update in a separate task to not block the web server response.
   // Heap-allocate params so the info survives after this function returns.
   auto* params = new OtaApplyParams{lastUpdateInfo, &otaUpdater};
+  lastUpdateInfo.available = false; // Prevent concurrent apply requests
 
   xTaskCreate(
       [](void* param) {
