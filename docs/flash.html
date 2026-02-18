@@ -135,21 +135,6 @@
             box-shadow: 0 4px 16px rgba(88, 166, 255, 0.3);
         }
 
-        .warning {
-            background: rgba(210, 153, 34, 0.1);
-            border: 1px solid var(--yellow);
-            border-radius: var(--radius);
-            padding: 16px;
-            margin-top: 16px;
-            font-size: 0.9rem;
-            color: var(--yellow);
-        }
-
-        .warning strong {
-            display: block;
-            margin-bottom: 4px;
-        }
-
         .info-box {
             background: rgba(88, 166, 255, 0.08);
             border: 1px solid rgba(88, 166, 255, 0.3);
@@ -226,37 +211,21 @@
 
         <div class="header">
             <h1>♟ OpenChess <span class="accent">Web Installer</span></h1>
-            <p>Flash your ESP32 directly from the browser — no IDE needed</p>
+            <p>Flash your ESP32 directly from the browser, no Arduino/PlatformIO IDE needed</p>
         </div>
 
         <div class="card">
             <h2><span class="step-number">1</span> Requirements</h2>
             <ul>
-                <li>A <strong>Chromium-based browser</strong> (Chrome, Edge, Opera) — Firefox and Safari are not
-                    supported</li>
-                <li>An <strong>ESP32 dev board</strong> connected via USB</li>
-                <li>USB drivers installed for your board (CP2102 or CH340)</li>
+                <li>A <strong>Chromium browser</strong> (Chrome, Edge, Opera) - Firefox/Safari aren't supported</li>
+                <li><strong>USB drivers</strong> installed for your board (CP2102 or CH340)</li>
             </ul>
-        </div>
-
-        <div class="card">
-            <h2><span class="step-number">2</span> What gets flashed</h2>
-            <ul>
-                <li><strong>Bootloader</strong> — ESP32 boot code</li>
-                <li><strong>Partition table</strong> — memory layout with OTA support</li>
-                <li><strong>Firmware</strong> — OpenChess application</li>
-                <li><strong>Web UI</strong> — chess board interface (LittleFS filesystem)</li>
-            </ul>
-            <div class="warning">
-                <strong>⚠️ First-time flash</strong>
-                This will erase any existing data on the ESP32. After flashing, the board will start in calibration
-                mode. Follow the Serial Monitor instructions to calibrate the sensor grid.
-            </div>
         </div>
 
         <div class="card install-section">
-            <h2 style="justify-content: center;"><span class="step-number">3</span> Flash OpenChess</h2>
-            <p style="margin-bottom: 20px;">Connect your ESP32 via USB and click the button below.</p>
+            <h2 style="justify-content: center;"><span class="step-number">2</span> Flash OpenChess</h2>
+            <p>Connect your ESP32 via USB and click the button below</p>
+            <p style="margin-bottom: 20px;">This will erase any existing data on the ESP32</p>
 
             <esp-web-install-button id="installButton" manifest="manifest.json">
                 <button slot="activate">Install OpenChess</button>
@@ -271,12 +240,21 @@
             </esp-web-install-button>
 
             <div class="info-box" style="margin-top: 24px;">
-                <strong>After flashing:</strong> The board will create a WiFi access point called
-                <strong>OpenChess</strong> (password: <code>chess123</code>). Connect to it and open
-                <code>http://192.168.4.1</code> to configure your WiFi network and start playing.
-                <br><br>
-                Future updates can be installed automatically over WiFi (OTA) from the board's web interface.
+                Future updates can be installed automatically over WiFi (OTA) from the webUI
             </div>
+        </div>
+
+        <div class="card">
+            <h2><span class="step-number">3</span> After Flashing</h2>
+            <ul>
+                <li><strong>Calibration</strong>: Click "Logs & Console" and follow instructions to calibrate your board
+                    or temporarily skip it by typing <strong>skip</strong> in the console and pressing Enter</li>
+                <li><strong>Config</strong>: After calibration, connect to the <strong>OpenChess</strong> WiFi
+                    (password: <strong>chess123</strong>) and open <strong>http://192.168.4.1</strong>
+                    to configure internet access, Lichess token and board settings
+                </li>
+                <li><strong>Play</strong>: Start a game by selecting a mode from the webUI or the physical board</li>
+            </ul>
         </div>
     </div>
 

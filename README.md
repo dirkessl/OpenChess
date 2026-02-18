@@ -1,4 +1,4 @@
-# OpenChess - Smart Chess Board
+# OpenChess - Smart Chess Board [![Build & Release](https://github.com/joojoooo/OpenChess/actions/workflows/release.yml/badge.svg)](https://github.com/joojoooo/OpenChess/actions/workflows/release.yml)
 
 OpenChess is a smart chessboard, it can show legal moves, plays against you using Stockfish or let you play online Lichess games on the physical board. It saves all games, allowing you to review them later
 

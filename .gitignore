@@ -20,3 +20,6 @@ Thumbs.db
 
 # LittleFS content hash (used by upload_fs.py)
 .littlefs_hash
+
+# Firmware binaries downloaded by GitHub Pages workflow (not committed to repo)
+docs/firmware/

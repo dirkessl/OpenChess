@@ -99,3 +99,13 @@ jobs:
             The board checks for updates automatically at boot (can be disabled in Board Settings).
             - **Firmware**: Updated via `firmware.bin`
             - **Web UI**: Updated via `web_assets.tar` (preserves saved games on LittleFS)
+
+  # Deploy GitHub Pages with the new release firmware so the Web Installer can fetch
+  # binaries from the same origin (GitHub Pages has CORS headers, GitHub Releases does not).
+  deploy-pages:
+    needs: build
+    uses: ./.github/workflows/pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
