@@ -378,7 +378,7 @@
         const GAME_HEADER_SIZE = 16;
         const FEN_MARKER = 0xFFFF;
 
-        const RESULT_NAMES = ['In Progress', 'Checkmate', 'Stalemate', 'Draw (50-move)', 'Draw (3-fold)', 'Resignation', 'Draw (agreement)'];
+        const RESULT_NAMES = ['In Progress', 'Checkmate', 'Stalemate', 'Draw (50-move)', 'Draw (3-fold)', 'Draw (agreement)', 'Draw (insufficient material)', 'Resignation'];
         const MODE_NAMES = { 1: 'Human vs Human', 2: 'vs Stockfish' };
         const DEPTH_NAMES = { 5: 'Easy', 8: 'Medium', 11: 'Hard', 15: 'Expert' };
 
@@ -551,7 +551,7 @@
         }
 
         // ==========================================
-        // Move navigation (scrubbing) — segment-based
+        // Move navigation (scrubbing) -segment-based
         // ==========================================
 
         function getActiveSegments() {
@@ -741,7 +741,7 @@
                 const seg = segments[s];
                 const hist = seg.engine.history({ verbose: true });
 
-                // Board Edit header (skip segment 0 — it's the game start)
+                // Board Edit header (skip segment 0 -it's the game start)
                 if (s > 0) {
                     const editGlobalIdx = seg.globalOffset;
                     movesHtml += '<div class="board-edit-marker" data-gidx="' + editGlobalIdx + '">\u270f\ufe0f Board Edit #' + s + '</div>';
@@ -763,13 +763,13 @@
                     const globalIdx = seg.globalOffset + 1 + m;
 
                     if (isWhiteTurn) {
-                        // White move — start a new row
+                        // White move -start a new row
                         movesHtml += '<span class="pgn-move-num">' + moveNum + '.</span>';
                         movesHtml += '<span class="pgn-move" data-gidx="' + globalIdx + '">' + hist[m].san + '</span>';
                         isWhiteTurn = false;
                     } else {
                         if (m === 0) {
-                            // Black starts this segment — show number + empty white cell
+                            // Black starts this segment -show number + empty white cell
                             movesHtml += '<span class="pgn-move-num">' + moveNum + '.</span>';
                             movesHtml += '<span class="pgn-move-empty"></span>';
                         }
@@ -783,9 +783,9 @@
             }
 
             // Add result
-            if (meta.result === 1 || meta.result === 5) {
+            if (meta.result === 1 || meta.result === 7) {
                 movesHtml += '<span class="pgn-result">' + (meta.winnerColor === 'w' ? '1-0' : '0-1') + '</span>';
-            } else if (meta.result >= 2 && meta.result <= 4) {
+            } else if (meta.result >= 2 && meta.result <= 6) {
                 movesHtml += '<span class="pgn-result">\u00bd-\u00bd</span>';
             }
 
@@ -1431,7 +1431,7 @@
                                     }
                                 }
                                 if (!foundMove) {
-                                    // Position changed dramatically (board edit) — add new segment
+                                    // Position changed dramatically (board edit) -add new segment
                                     try {
                                         const newEngine = new Chess(data.fen);
                                         liveSegments.push({

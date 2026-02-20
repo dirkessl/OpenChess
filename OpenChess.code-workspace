@@ -9,6 +9,9 @@
 		"C_Cpp.clang_format_fallbackStyle": "Google",
 		"search.exclude": {
 			"**/data/**": true
+		},
+		"chat.tools.terminal.autoApprove": {
+			"~/.platformio/penv/bin/pio": true
 		}
 	}
 }

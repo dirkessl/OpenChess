@@ -334,6 +334,14 @@ void ChessGame::updateGameStatus() {
     return;
   }
 
+  if (chessEngine->isInsufficientMaterial(board)) {
+    Serial.println("DRAW by insufficient material! Neither side can checkmate.");
+    boardDriver->fireworkAnimation(LedColors::Cyan);
+    gameOver = true;
+    if (moveHistory) moveHistory->finishGame(RESULT_DRAW_INSUFFICIENT, 'd');
+    return;
+  }
+
   if (chessEngine->isKingInCheck(board, currentTurn)) {
     Serial.printf("%s is in CHECK!\n", ChessUtils::colorName(currentTurn));
     boardDriver->clearAllLEDs(false);

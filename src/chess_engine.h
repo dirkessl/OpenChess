@@ -109,6 +109,7 @@ class ChessEngine {
   bool hasAnyLegalMove(const char board[8][8], char color);
   bool isCheckmate(const char board[8][8], char kingColor);
   bool isStalemate(const char board[8][8], char colorToMove);
+  bool isInsufficientMaterial(const char board[8][8]) const;
 };
 
 #endif // CHESS_ENGINE_H

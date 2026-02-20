@@ -609,3 +609,50 @@ bool ChessEngine::isCheckmate(const char board[8][8], char kingColor) {
 bool ChessEngine::isStalemate(const char board[8][8], char colorToMove) {
   return !isKingInCheck(board, colorToMove) && !hasAnyLegalMove(board, colorToMove);
 }
+
+bool ChessEngine::isInsufficientMaterial(const char board[8][8]) const {
+  int whiteKnights = 0, whiteBishops = 0;
+  int blackKnights = 0, blackBishops = 0;
+  int whiteBishopSquareColor = -1, blackBishopSquareColor = -1;
+  bool hasOtherPieces = false;
+
+  for (int r = 0; r < 8; r++) {
+    for (int c = 0; c < 8; c++) {
+      char p = board[r][c];
+      if (p == ' ' || p == 'K' || p == 'k') continue;
+      switch (p) {
+        case 'N':
+          whiteKnights++;
+          break;
+        case 'n':
+          blackKnights++;
+          break;
+        case 'B':
+          whiteBishops++;
+          whiteBishopSquareColor = (r + c) % 2;
+          break;
+        case 'b':
+          blackBishops++;
+          blackBishopSquareColor = (r + c) % 2;
+          break;
+        default:
+          // Pawn, rook, or queen = sufficient material
+          return false;
+      }
+    }
+  }
+
+  int totalMinor = whiteKnights + whiteBishops + blackKnights + blackBishops;
+
+  // K vs K
+  if (totalMinor == 0) return true;
+
+  // K+N vs K or K+B vs K
+  if (totalMinor == 1) return true;
+
+  // K+B vs K+B with bishops on same color square
+  if (totalMinor == 2 && whiteBishops == 1 && blackBishops == 1 && whiteBishopSquareColor == blackBishopSquareColor)
+    return true;
+
+  return false;
+}
