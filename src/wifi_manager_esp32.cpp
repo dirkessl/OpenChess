@@ -60,7 +60,10 @@ void WiFiManagerESP32::begin() {
   } else {
     Serial.println("Configure WiFi credentials from the web interface to join your WiFi network (Stockfish needs internet)");
   }
-  Serial.println("=====================================");
+  Serial.println("=====================================\n");
+
+  // Check for OTA updates, populates lastUpdateInfo for the web UI. If auto-update is enabled, also applies the update.
+  otaUpdater.autoUpdate(lastUpdateInfo, autoOtaEnabled);
 
   // Set up web server routes with async handlers
   server.on("/board-update", HTTP_GET, [this](AsyncWebServerRequest* request) { request->send(200, "application/json", this->getBoardUpdateJSON()); });
@@ -80,7 +83,6 @@ void WiFiManagerESP32::begin() {
   // OTA update endpoints
   server.on("/ota/status", HTTP_GET, [this](AsyncWebServerRequest* request) { this->handleOtaStatus(request); });
   server.on("/ota/settings", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleOtaSettings(request); });
-  server.on("/ota/check", HTTP_GET, [this](AsyncWebServerRequest* request) { this->handleOtaCheck(request); });
   server.on("/ota/apply", HTTP_POST, [this](AsyncWebServerRequest* request) { this->handleOtaApply(request); });
   // OTA manual upload endpoints — JS sends raw binary body (application/octet-stream),
   // so only the body handler (3rd callback) fires; the multipart file handler (2nd) is unused.
@@ -555,9 +557,17 @@ void WiFiManagerESP32::handleDeleteGame(AsyncWebServerRequest* request) {
 // ========== OTA Update Handlers ==========
 
 void WiFiManagerESP32::handleOtaStatus(AsyncWebServerRequest* request) {
+  // If we never got update info (e.g. no internet at boot), retry now
+  if (lastUpdateInfo.version.isEmpty() && WiFi.status() == WL_CONNECTED)
+    lastUpdateInfo = otaUpdater.checkForUpdate();
+
   JsonDocument doc;
   doc["version"] = FIRMWARE_VERSION;
   doc["autoUpdate"] = autoOtaEnabled;
+  doc["available"] = lastUpdateInfo.available;
+  doc["latestVersion"] = lastUpdateInfo.version;
+  doc["hasFirmware"] = lastUpdateInfo.firmwareUrl.length() > 0;
+  doc["hasWebAssets"] = lastUpdateInfo.webAssetsUrl.length() > 0;
   String output;
   serializeJson(doc, output);
   request->send(200, "application/json", output);
@@ -577,19 +587,6 @@ void WiFiManagerESP32::handleOtaSettings(AsyncWebServerRequest* request) {
   } else {
     request->send(400, "text/plain", "Missing parameter");
   }
-}
-
-void WiFiManagerESP32::handleOtaCheck(AsyncWebServerRequest* request) {
-  lastUpdateInfo = otaUpdater.checkForUpdate();
-  JsonDocument doc;
-  doc["available"] = lastUpdateInfo.available;
-  doc["version"] = lastUpdateInfo.version;
-  doc["currentVersion"] = FIRMWARE_VERSION;
-  doc["hasFirmware"] = lastUpdateInfo.firmwareUrl.length() > 0;
-  doc["hasWebAssets"] = lastUpdateInfo.webAssetsUrl.length() > 0;
-  String output;
-  serializeJson(doc, output);
-  request->send(200, "application/json", output);
 }
 
 // Parameters passed to the OTA apply task via heap allocation (avoids static variable race conditions)

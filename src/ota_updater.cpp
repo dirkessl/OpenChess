@@ -143,13 +143,12 @@ OtaUpdateInfo OtaUpdater::checkForUpdate() {
 
   Serial.printf("OTA: Current version: %s, Latest release: %s\n", FIRMWARE_VERSION, tagName.c_str());
 
+  info.version = tagName;
   if (!isNewerVersion(FIRMWARE_VERSION, tagName)) {
     Serial.println("OTA: Firmware is up to date");
     return info;
   }
-
   info.available = true;
-  info.version = tagName;
 
   // Find firmware.bin and web_assets.tar in release assets
   JsonArray assets = doc["assets"];
@@ -374,15 +373,16 @@ void OtaUpdater::applyUpdate(const OtaUpdateInfo& info) {
   }
 }
 
-void OtaUpdater::autoUpdate() {
+void OtaUpdater::autoUpdate(OtaUpdateInfo& info, bool apply) {
   Serial.println("OTA: Checking for updates...");
 
-  OtaUpdateInfo info = checkForUpdate();
+  info = checkForUpdate();
   if (!info.available) {
     Serial.println("OTA: No update available");
     return;
   }
 
   Serial.printf("OTA: New version available: v%s (current: %s)\n", info.version.c_str(), FIRMWARE_VERSION);
-  applyUpdate(info);
+  if (apply)
+    applyUpdate(info);
 }

@@ -166,10 +166,6 @@
                 <h3>Software Updates</h3>
             </div>
             <div class="section-content" id="ota-content">
-                <div class="ota-version-info" id="ota-version-info">
-                    <span>Current version: </span><strong id="current-version">loading...</strong>
-                </div>
-
                 <div class="ota-auto-toggle">
                     <span>Automatic Updates</span>
                     <label class="toggle-switch">
@@ -178,11 +174,16 @@
                     </label>
                 </div>
 
-                <button type="button" id="checkUpdateBtn" class="button"
-                    style="background-color: #2196F3; margin-top: 10px;">
-                    Check for Updates Now
-                </button>
-                <div id="ota-status" class="ota-status" style="display:none;"></div>
+                <div class="ota-version-info" id="ota-version-info">
+                    <div class="ota-version-row">
+                        <span>Current version:</span>
+                        <strong id="current-version">loading...</strong>
+                    </div>
+                    <div class="ota-version-row">
+                        <span>Latest version:</span>
+                        <a id="latest-version" href="#" target="_blank">loading...</a>
+                    </div>
+                </div>
 
                 <div class="ota-manual-section">
                     <p class="section-description" style="margin-top: 15px; margin-bottom: 10px;">
@@ -202,6 +203,26 @@
                         <span id="ota-progress-text">Uploading...</span>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Update Available Popup Overlay -->
+        <div class="update-overlay" id="updateOverlay">
+            <div class="update-popup">
+                <h3>Update Available</h3>
+                <p>A new version of OpenChess is available:</p>
+                <div class="update-popup-versions">
+                    <span>Current: <strong id="popup-current-version"></strong></span>
+                    <span class="update-arrow">→</span>
+                    <span>New: <a id="popup-new-version" href="#" target="_blank"></a></span>
+                </div>
+                <div class="update-popup-actions">
+                    <button type="button" id="updateNowBtn" class="button"
+                        style="background-color: #4CAF50; margin: 5px 0;">Update Now</button>
+                    <button type="button" id="updateLaterBtn" class="button"
+                        style="background-color: #666; margin: 5px 0;">Later</button>
+                </div>
+                <div id="update-popup-status" class="update-popup-status" style="display:none;"></div>
             </div>
         </div>
 
@@ -276,7 +297,7 @@
         updateLichessInfo();
         updateBoardSettings();
         updateHardwareConfig();
-        updateOtaSettings();
+        updateOtaStatus();
 
         // Board settings functions
         function updateBoardSettings() {
@@ -476,17 +497,85 @@
 
         // ========== OTA Updates ==========
 
-        function updateOtaSettings() {
+        const GITHUB_RELEASES_URL = 'https://github.com/joojoooo/OpenChess/releases/tag/';
+
+        function formatVersion(v) {
+            return v === 'dev' ? v : 'v' + v;
+        }
+
+        function updateOtaStatus() {
+            const latestEl = document.getElementById('latest-version');
             fetch('/ota/status')
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('current-version').textContent = (data.version == 'dev' ? data.version : 'v' + data.version);
+                    document.getElementById('current-version').textContent = formatVersion(data.version);
                     document.getElementById('autoOtaToggle').checked = data.autoUpdate;
+
+                    if (data.latestVersion) {
+                        const latestVersionStr = formatVersion(data.latestVersion);
+                        latestEl.textContent = latestVersionStr;
+                        latestEl.href = GITHUB_RELEASES_URL + 'v' + data.latestVersion;
+
+                        if (data.available) {
+                            latestEl.style.color = '#4CAF50';
+                            showUpdatePopup(data);
+                        } else {
+                            latestEl.style.color = '#ec8703';
+                        }
+                    } else {
+                        latestEl.textContent = 'unavailable';
+                        latestEl.removeAttribute('href');
+                        latestEl.style.color = '#888';
+                    }
                 })
                 .catch(() => {
                     document.getElementById('current-version').textContent = 'unknown';
+                    latestEl.textContent = 'unavailable';
+                    latestEl.removeAttribute('href');
+                    latestEl.style.color = '#888';
                 });
         }
+
+        function showUpdatePopup(data) {
+            const overlay = document.getElementById('updateOverlay');
+            document.getElementById('popup-current-version').textContent = formatVersion(data.version);
+            const newVerEl = document.getElementById('popup-new-version');
+            newVerEl.textContent = formatVersion(data.latestVersion);
+            newVerEl.href = GITHUB_RELEASES_URL + 'v' + data.latestVersion;
+            overlay.classList.add('visible');
+        }
+
+        document.getElementById('updateLaterBtn').addEventListener('click', function () {
+            document.getElementById('updateOverlay').classList.remove('visible');
+        });
+
+        document.getElementById('updateNowBtn').addEventListener('click', function () {
+            const statusEl = document.getElementById('update-popup-status');
+            const btn = this;
+            btn.disabled = true;
+            btn.textContent = 'Updating...';
+            statusEl.style.display = 'block';
+            statusEl.textContent = 'Updating... Do not power off the board!';
+            statusEl.style.color = '#ec8703';
+            document.getElementById('updateLaterBtn').style.display = 'none';
+
+            fetch('/ota/apply', { method: 'POST' })
+                .then(r => r.text())
+                .then(msg => {
+                    statusEl.textContent = msg;
+                    setTimeout(() => {
+                        statusEl.textContent = 'Board is rebooting... Refresh this page in a few seconds.';
+                        statusEl.style.color = '#4CAF50';
+                    }, 3000);
+                })
+                .catch(() => {
+                    statusEl.textContent = 'Update failed. Please try again.';
+                    statusEl.style.color = '#f44336';
+                    btn.disabled = false;
+                    btn.textContent = 'Update Now';
+                    document.getElementById('updateLaterBtn').style.display = '';
+                });
+        });
 
         // Auto-update toggle
         document.getElementById('autoOtaToggle').addEventListener('change', function () {
@@ -497,53 +586,6 @@
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: formData
             }).catch(() => { });
-        });
-
-        // Check for updates button
-        document.getElementById('checkUpdateBtn').addEventListener('click', function () {
-            const statusEl = document.getElementById('ota-status');
-            const btn = this;
-            btn.disabled = true;
-            btn.textContent = 'Checking...';
-            statusEl.style.display = 'block';
-            statusEl.textContent = 'Checking for updates...';
-            statusEl.className = 'ota-status';
-
-            fetch('/ota/check')
-                .then(response => response.json())
-                .then(data => {
-                    btn.disabled = false;
-                    btn.textContent = 'Check for Updates Now';
-                    if (data.available) {
-                        statusEl.textContent = 'Update available: v' + data.version;
-                        statusEl.className = 'ota-status ota-status-available';
-                        if (confirm('Update to v' + data.version + '?\n\nThis will update firmware and web assets. The board will reboot.')) {
-                            statusEl.textContent = 'Updating... Do not power off the board!';
-                            fetch('/ota/apply', { method: 'POST' })
-                                .then(r => r.text())
-                                .then(msg => {
-                                    statusEl.textContent = msg;
-                                    // Board will reboot, so we'll lose connection
-                                    setTimeout(() => {
-                                        statusEl.textContent = 'Board is rebooting... Refresh this page in a few seconds.';
-                                    }, 3000);
-                                })
-                                .catch(() => {
-                                    statusEl.textContent = 'Update failed. Please try again.';
-                                    statusEl.className = 'ota-status ota-status-error';
-                                });
-                        }
-                    } else {
-                        statusEl.textContent = 'Firmware is up to date (v' + data.currentVersion + ')';
-                        statusEl.className = 'ota-status ota-status-uptodate';
-                    }
-                })
-                .catch(() => {
-                    btn.disabled = false;
-                    btn.textContent = 'Check for Updates Now';
-                    statusEl.textContent = 'Failed to check for updates. Is WiFi connected?';
-                    statusEl.className = 'ota-status ota-status-error';
-                });
         });
 
         // Drag & Drop OTA upload

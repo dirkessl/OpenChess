@@ -33,8 +33,8 @@ class OtaUpdater {
   // Applies web assets first, then firmware. Firmware triggers reboot on success.
   void applyUpdate(const OtaUpdateInfo& info);
 
-  // Auto-update: check for update and apply if available (called at boot)
-  void autoUpdate();
+  // Auto-update: check for update, populate info. Applies update only if apply is true.
+  void autoUpdate(OtaUpdateInfo& info, bool apply = true);
 
  private:
   BoardDriver* boardDriver;

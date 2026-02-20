@@ -728,7 +728,7 @@
 
             metaHtml += '<span class=\"meta-date\">' + date + '</span>';
             metaHtml += '<span class=\"meta-mode\">' + opponent + '</span>';
-            metaHtml += '<span class=\"meta-result\">' + winner + ' - ' + result + '</span>';
+            metaHtml += '<span class=\"meta-result\">' + (meta.winnerColor === 'd' ? result : winner + ' - ' + result) + '</span>';
             metaHtml += '</div>';
 
             $('#reviewMeta').html(metaHtml);

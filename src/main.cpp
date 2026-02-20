@@ -68,12 +68,6 @@ void setup() {
   // Kick off NTP time sync (non-blocking, will resolve in background)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
-  // Check for OTA updates at boot (if enabled and WiFi is connected)
-  if (wifiManager.isAutoOtaEnabled() && WiFi.status() == WL_CONNECTED) {
-    Serial.println("OTA: Auto-update check enabled, checking for updates...");
-    wifiManager.getOtaUpdater().autoUpdate();
-  }
-
   // Check for a live game that can be resumed
   uint8_t resumeMode = 0, resumePlayerColor = 0, resumeBotDepth = 0;
   if (moveHistory.hasLiveGame() && moveHistory.getLiveGameInfo(resumeMode, resumePlayerColor, resumeBotDepth)) {

@@ -84,7 +84,6 @@ class WiFiManagerESP32 {
   // OTA update handlers
   void handleOtaStatus(AsyncWebServerRequest* request);
   void handleOtaSettings(AsyncWebServerRequest* request);
-  void handleOtaCheck(AsyncWebServerRequest* request);
   void handleOtaApply(AsyncWebServerRequest* request);
   // ESPAsyncWebServer body handlers receive data in chunks via callbacks (data, len, index, total),
   // not as a continuous Stream. This means we can't reuse the Stream-based OtaUpdater methods directly.
