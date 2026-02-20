@@ -1426,3 +1426,46 @@ input[type="submit"]:hover,
 .delete-confirm-btn.no:hover {
     background-color: #777;
 }
+
+/* Promotion popup */
+.promotion-popup {
+    background-color: #353434;
+    border: 2px solid #ec8703;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+
+.promotion-popup h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    color: #fff;
+}
+
+.promotion-pieces {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.promotion-piece-btn {
+    width: 72px;
+    height: 72px;
+    background: none;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 4px;
+    transition: border-color 0.15s, background-color 0.15s;
+}
+
+.promotion-piece-btn:hover {
+    border-color: #ec8703;
+    background-color: rgba(236, 135, 3, 0.15);
+}
+
+.promotion-piece-btn img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}

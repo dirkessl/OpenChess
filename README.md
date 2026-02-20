@@ -23,6 +23,7 @@ Features that differentiate this fork from the original Concept-Bytes project:
 - **Draw/Resign**: Lift both kings (non playing color first) off the board and hold them lifted for 2 seconds to end the game.
 - **Castling**: Castling is now possible, just move the king 2 squares towards the side you want to castle and it will show you where to move the rook.
 - **En passant**: En passant captures are now possible. Also correctly sets en passant square in the FEN (so Stockfish can take en passant too)
+- **Promotion**: The promoted piece can now be picked from the WebUI. If the WebUI is not open, Queen is automatically picked.
 - **Bot**: You can now pick the bot starting side and difficulty
 - **Turns**: Doesn't allow white to play infinite moves in a row, enforces turns
 - **Calibration**: Automatically orders GPIOs, shift-register outputs and LED index mapping. You won't need to care about pin order or LED strip layout. In simple terms: it can rotate/flip the board. Also makes it easier to throubleshoot magnet detection issues by printing info in the serial monitor console.

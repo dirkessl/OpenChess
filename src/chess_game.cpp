@@ -123,10 +123,44 @@ void ChessGame::applyMove(int fromRow, int fromCol, int toRow, int toCol, char p
   }
 
   if (chessEngine->isPawnPromotion(piece, toRow)) {
-    promotion = promotion != ' ' && promotion != '\0' ? (ChessUtils::isWhitePiece(piece) ? toupper(promotion) : tolower(promotion)) : (ChessUtils::isWhitePiece(piece) ? 'Q' : 'q');
+    if (!replaying) boardDriver->promotionAnimation(toCol);
+    // If promotion piece is already specified (from bot, lichess, replay), use it
+    if (promotion != ' ' && promotion != '\0') {
+      promotion = ChessUtils::isWhitePiece(piece) ? toupper(promotion) : tolower(promotion);
+    } else if (!replaying && !isRemoteMove && wifiManager->isWebClientConnected()) {
+      // Acquire LED mutex so any queued animation (blink/capture) finishes first, then show Yellow LED on the promotion square while waiting
+      boardDriver->acquireLEDs();
+      boardDriver->clearAllLEDs(false);
+      boardDriver->setSquareLED(toRow, toCol, LedColors::Yellow);
+      boardDriver->showLEDs();
+      boardDriver->releaseLEDs();
+      // Wait for user to choose promotion piece
+      wifiManager->startPromotionWait(ChessUtils::getPieceColor(piece));
+      unsigned long promotionStart = millis();
+      const unsigned long PROMOTION_TIMEOUT_MS = 60000; // 60 second timeout
+      while (wifiManager->isPromotionPending() && wifiManager->getPromotionChoice() == ' ') {
+        if (millis() - promotionStart >= PROMOTION_TIMEOUT_MS) {
+          Serial.println("Promotion timeout - defaulting to queen");
+          break;
+        }
+        delay(100);
+      }
+
+      promotion = wifiManager->getPromotionChoice();
+      wifiManager->clearPromotion();
+      boardDriver->clearAllLEDs();
+
+      // If timed out (no choice received), default to queen
+      if (promotion == ' ')
+        promotion = ChessUtils::isWhitePiece(piece) ? 'Q' : 'q';
+      else
+        promotion = ChessUtils::isWhitePiece(piece) ? toupper(promotion) : tolower(promotion);
+    } else {
+      // No web client, default to queen
+      promotion = ChessUtils::isWhitePiece(piece) ? 'Q' : 'q';
+    }
     board[toRow][toCol] = promotion;
     Serial.printf("Pawn promoted to %c\n", promotion);
-    if (!replaying) boardDriver->promotionAnimation(toCol);
   }
 
   if (moveHistory && moveHistory->isRecording())

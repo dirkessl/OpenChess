@@ -59,6 +59,22 @@ class WiFiManagerESP32 {
   volatile bool hasPendingDraw;
   char pendingResignColor; // 'w' or 'b' — the side resigning
 
+  // Promotion state for web-based piece selection
+  struct PromotionState {
+    volatile bool pending; // True while waiting for web client to choose a piece
+    volatile char choice;  // Piece chosen by web client ('q','r','b','n') or ' ' if none yet
+    char color;            // 'w' or 'b' — color of the promoting pawn
+    void reset() {
+      pending = false;
+      choice = ' ';
+      color = ' ';
+    }
+  };
+  PromotionState promotion;
+
+  // Web client heartbeat (tracks whether board.html is actively polling)
+  unsigned long lastBoardPollTime; // millis() of last /board-update GET request
+
   // Deferred WiFi reconnection (set by web handler, processed in main loop)
   String pendingWiFiSSID;
   String pendingWiFiPassword;
@@ -70,6 +86,7 @@ class WiFiManagerESP32 {
   String getLichessInfoJSON();
   String getBoardSettingsJSON();
   void handleBoardEditSuccess(AsyncWebServerRequest* request);
+  void handlePromotion(AsyncWebServerRequest* request);
   void handleConnectWiFi(AsyncWebServerRequest* request);
   void handleGameSelection(AsyncWebServerRequest* request);
   void handleSaveLichessToken(AsyncWebServerRequest* request);
@@ -131,6 +148,13 @@ class WiFiManagerESP32 {
   bool getPendingDraw();
   void clearPendingResign();
   void clearPendingDraw();
+  // Promotion management (from web interface)
+  void startPromotionWait(char color);
+  bool isPromotionPending() const { return promotion.pending; }
+  char getPromotionChoice() const { return promotion.choice; }
+  void clearPromotion();
+  // Web client connection check
+  bool isWebClientConnected() const;
   // WiFi connection management
   bool connectToWiFi(const String& ssid, const String& password, bool fromWeb = false);
   // Call from main loop to process deferred WiFi reconnection

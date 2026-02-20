@@ -143,10 +143,13 @@ void ChessLichess::update() {
 
   if ((currentTurn == myColor) && tryPlayerMove(myColor, fromRow, fromCol, toRow, toCol)) {
     // Player's turn - handle physical move
-    if (chessEngine->isPawnPromotion(board[fromRow][fromCol], toRow))
-      promotion = 'q'; // Default promotion to queen, can be enhanced to allow player choice later
-    // Process locally FIRST - show animations immediately
-    applyMove(fromRow, fromCol, toRow, toCol, promotion);
+    // Check if this will be a promotion BEFORE applyMove modifies the board
+    bool isPromotion = chessEngine->isPawnPromotion(board[fromRow][fromCol], toRow);
+    // Promotion is handled inside applyMove: if web client is connected, it waits for user choice, otherwise it defaults to queen.
+    applyMove(fromRow, fromCol, toRow, toCol);
+    // After applyMove, retrieve the actual promotion piece used
+    if (isPromotion)
+      promotion = tolower(board[toRow][toCol]);
     updateGameStatus();
     wifiManager->updateBoardState(ChessUtils::boardToFEN(board, currentTurn, chessEngine), ChessUtils::evaluatePosition(board));
     // Then send move to Lichess (blocking)

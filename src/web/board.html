@@ -37,6 +37,16 @@
         </div>
     </div>
 
+    <!-- Promotion overlay -->
+    <div id="promotionOverlay" class="settings-overlay">
+        <div class="promotion-popup">
+            <h3>Promote Pawn</h3>
+            <div class="promotion-pieces" id="promotionPieces">
+                <!-- Pieces injected dynamically based on color -->
+            </div>
+        </div>
+    </div>
+
     <!-- Settings popup overlay -->
     <div id="settingsPopup" class="settings-overlay">
         <div class="settings-popup">
@@ -1402,6 +1412,50 @@
             text.style.color = textColor;
         }
 
+        // ==========================================
+        // Promotion overlay
+        // ==========================================
+
+        let promotionPending = false;
+        let promotionCooldownUntil = 0;
+
+        function showPromotionOverlay(color) {
+            const pieces = (color === 'w') ? [{ code: 'q', piece: 'wQ' }, { code: 'r', piece: 'wR' }, { code: 'b', piece: 'wB' }, { code: 'n', piece: 'wN' }] : [{ code: 'q', piece: 'bQ' }, { code: 'r', piece: 'bR' }, { code: 'b', piece: 'bB' }, { code: 'n', piece: 'bN' }];
+
+            const container = $('#promotionPieces');
+            container.empty();
+            pieces.forEach(p => {
+                const btn = $('<button class="promotion-piece-btn" data-piece="' + p.code + '"></button>');
+                btn.append('<img src="' + pieceTheme(p.piece) + '" alt="' + p.piece + '">');
+                btn.on('click', function () {
+                    selectPromotion(p.code);
+                });
+                container.append(btn);
+            });
+
+            promotionPending = true;
+            $('#promotionOverlay').addClass('visible');
+        }
+
+        function hidePromotionOverlay() {
+            promotionPending = false;
+            $('#promotionOverlay').removeClass('visible');
+        }
+
+        function selectPromotion(piece) {
+            hidePromotionOverlay();
+            promotionCooldownUntil = Date.now() + 2000;
+            fetch('/promotion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'piece=' + encodeURIComponent(piece)
+            }).then(r => {
+                if (!r.ok) console.log('Failed to send promotion choice');
+            }).catch(e => {
+                console.log('Promotion request error:', e);
+            });
+        }
+
         // Fetch board state from server
         function fetchBoardState() {
             if (editMode || reviewMode) return;
@@ -1478,6 +1532,13 @@
                     }
                     if (data.evaluation !== undefined && isLive) {
                         updateEvaluationBar(data.evaluation);
+                    }
+                    // Show promotion overlay if server is waiting for a promotion choice
+                    if (data.promotion && !promotionPending && Date.now() > promotionCooldownUntil) {
+                        showPromotionOverlay(data.promotion.color);
+                    } else if (!data.promotion && promotionPending) {
+                        // Server no longer waiting (e.g. timed out) - hide overlay
+                        hidePromotionOverlay();
                     }
                 })
                 .catch(error => {
