@@ -11,8 +11,7 @@
     <script src="./scripts/jquery-4.0.0.min.js"></script>
     <script src="./scripts/chessboard-1.0.0.min.js"></script>
     <script>var exports = {};</script>
-    <script src="https://unpkg.com/chess.js@1.4.0/dist/cjs/chess.js"></script>
-    <script>var Chess = exports.Chess;</script>
+    <script src="./scripts/chess.js"></script>
 </head>
 
 <body>
@@ -729,7 +728,7 @@
 
             metaHtml += '<span class=\"meta-date\">' + date + '</span>';
             metaHtml += '<span class=\"meta-mode\">' + opponent + '</span>';
-            metaHtml += '<span class=\"meta-result\">' + winner + ' \u2014 ' + result + '</span>';
+            metaHtml += '<span class=\"meta-result\">' + winner + ' - ' + result + '</span>';
             metaHtml += '</div>';
 
             $('#reviewMeta').html(metaHtml);
@@ -939,7 +938,7 @@
             if (winnerChar === 'w') return '<span class="winner-square white-square"></span> White wins';
             if (winnerChar === 'b') return '<span class="winner-square black-square"></span> Black wins';
             if (winnerChar === 'd') return '\u00bd Draw';
-            return '\u2014';
+            return '-';
         }
 
         // Helper: format opponent/mode text from game metadata

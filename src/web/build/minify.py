@@ -74,8 +74,10 @@ else:
             run(f'cleancss -O2 "{f}" -o "{out}"')
 
         elif f.suffix == ".js":
+            # Skip --toplevel for chess.js: it exposes globals that board.html depends on
+            toplevel = "" if f.name == "chess.js" else " --toplevel"
             run(
-                f'terser "{f}" --compress --mangle --comments false --ecma 2020 --toplevel -o "{out}"'
+                f'terser "{f}" --compress --mangle --comments false --ecma 2020{toplevel} -o "{out}"'
             )
 
         else:
